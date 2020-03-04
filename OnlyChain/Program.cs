@@ -42,11 +42,7 @@ namespace OnlyChain {
 
         static void Main(string[] args) {
             var sw = new System.Diagnostics.Stopwatch();
-            TimeSpan t1 = TimeSpan.Zero;
-            TimeSpan t2 = TimeSpan.Zero;
-            int count = 0;
             while (true) {
-                count++;
                 var keys = new Address[1000000];
                 for (int i = 0; i < keys.Length; i++) keys[i] = Address.Random();
                 //var memSize = GC.GetTotalMemory(true);
@@ -57,30 +53,28 @@ namespace OnlyChain {
                     tree.Add(keys[i], keys[i].ToString());
                 }
                 sw.Stop();
-                t1 += sw.Elapsed;
-                Console.WriteLine(new TimeSpan(t1.Ticks / count));
+                Console.WriteLine(sw.Elapsed);
                 //Console.WriteLine((GC.GetTotalMemory(true) - memSize) / 1024.0 / 1024.0);
 
 
-                //sw.Restart();
-                //for (int i = 0; i < keys.Length; i++) {
-                //    if (!tree.TryGetValue(keys[i], out _)) throw new Exception();
-                //}
-                //sw.Stop();
-                //Console.WriteLine(sw.Elapsed);
+                sw.Restart();
+                for (int i = 0; i < keys.Length; i++) {
+                    if (!tree.TryGetValue(keys[i], out _)) throw new Exception();
+                }
+                sw.Stop();
+                Console.WriteLine(sw.Elapsed);
 
                 sw.Restart();
                 foreach (var kv in tree) ;
                 sw.Stop();
-                t2 += sw.Elapsed;
-                Console.WriteLine(new TimeSpan(t2.Ticks / count));
-                //Console.WriteLine(count);
+                Console.WriteLine(sw.Elapsed);
 
                 GC.Collect();
 
                 Console.WriteLine("====================================");
             }
             Thread.Sleep(-1);
+            //Console.WriteLine(tree.Count);
             return;
 
 

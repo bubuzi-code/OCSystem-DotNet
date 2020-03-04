@@ -167,13 +167,31 @@ namespace OnlyChain.Core {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal static INode CreateLongPathNode(byte* key, int length, INode child) => createNodeHandlers[length](key, child);
 
+            [StructLayout(LayoutKind.Sequential)]
             public sealed class PrefixMapNode : INode {
-                private readonly INode?[] children = new INode?[16];
+#pragma warning disable IDE0044
+                private INode? child0,
+                               child1,
+                               child2,
+                               child3,
+                               child4,
+                               child5,
+                               child6,
+                               child7,
+                               child8,
+                               child9,
+                               child10,
+                               child11,
+                               child12,
+                               child13,
+                               child14,
+                               child15;
+#pragma warning restore IDE0044
 
-                public PrefixMapNode(INode?[] children) => this.children = children;
+                internal ref INode? this[int i] => ref Unsafe.Add(ref child0, i);
 
                 public bool TryGetValue(byte* key, out TValue value) {
-                    if (children[*key] is INode child) {
+                    if (this[*key] is INode child) {
                         return child.TryGetValue(key + 1, out value);
                     }
                     value = default!;
@@ -181,18 +199,18 @@ namespace OnlyChain.Core {
                 }
 
                 public INode Add(ref AddArgs args, byte* key, int length) {
-                    if (children[*key] is INode child) {
-                        children[*key] = child.Add(ref args, key + 1, length - 1);
+                    if (this[*key] is INode child) {
+                        this[*key] = child.Add(ref args, key + 1, length - 1);
                     } else {
-                        children[*key] = CreateLongPathNode(key + 1, length - 1, new ValueNode(args.Value));
+                        this[*key] = CreateLongPathNode(key + 1, length - 1, new ValueNode(args.Value));
                         args.Update = false;
                     }
                     return this;
                 }
 
                 public IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
-                    for (int i = 0; i < children.Length; i++) {
-                        if (children[i] is INode child) {
+                    for (int i = 0; i < 16; i++) {
+                        if (this[i] is INode child) {
                             key[index] = (byte)i;
                             foreach (var kv in child.Enumerate(index + 1, key)) yield return kv;
                         }
@@ -227,15 +245,14 @@ namespace OnlyChain.Core {
                         child2 = child2.Add(ref args, key + 1, length - 1);
                         return this;
                     }
-                    var children = new INode?[16];
-                    children[prefix1] = child1;
-                    children[prefix2] = child2;
-                    children[*key] = CreateLongPathNode(key + 1, length - 1, new ValueNode(args.Value));
+
+                    var result = new PrefixMapNode();
+                    result[prefix1] = child1;
+                    result[prefix2] = child2;
+                    result[*key] = CreateLongPathNode(key + 1, length - 1, new ValueNode(args.Value));
                     args.Update = false;
-                    return new PrefixMapNode(children);
+                    return result;
                 }
-
-
 
                 public IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
                     if (prefix1 < prefix2) {
@@ -440,11 +457,11 @@ namespace OnlyChain.Core {
         }
 
         public void Add(TKey key, TValue value) {
-            //try {
+            try {
                 AddOrUpdate(key, value, false);
-            //} catch (ArgumentException) {
-            //    throw new ArgumentException($"键值'{key}'已存在", nameof(key));
-            //}
+            } catch (ArgumentException) {
+                throw new ArgumentException($"键值'{key}'已存在", nameof(key));
+            }
         }
 
         public void Add(KeyValuePair<TKey, TValue> item) {
