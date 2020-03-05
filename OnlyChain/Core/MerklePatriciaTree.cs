@@ -165,13 +165,15 @@ namespace OnlyChain.Core {
 
             public ref struct AddArgs {
                 public TValue Value;
+                public bool Result;
                 public bool Update;
             }
 
             public ref struct RemoveArgs {
                 public TValue Value;
-                public bool NeedCompareValue;
                 public bool Result;
+                public bool NeedCompareValue;
+                public bool NeedSetValue;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -213,6 +215,7 @@ namespace OnlyChain.Core {
                         this[*key] = child.Add(ref args, key + 1, length - 1);
                     } else {
                         this[*key] = CreateLongPathNode(key + 1, length - 1, new ValueNode(args.Value));
+                        args.Result = true;
                         args.Update = false;
                     }
                     return this;
@@ -248,6 +251,14 @@ namespace OnlyChain.Core {
                     var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(&p1, this[p1]!);
                     return this[p1]!.PrefixConcat(result);
                 }
+
+                public override string ToString() {
+                    var list = new List<char>(16);
+                    for (int i = 0; i < 16; i++) {
+                        if (this[i] is INode) list.Add("0123456789abcdef"[i]);
+                    }
+                    return $"[{string.Join(",", list)}],count={list.Count}";
+                }
             }
 
             public sealed class BinaryBranchNode : INode {
@@ -282,6 +293,7 @@ namespace OnlyChain.Core {
                     result[prefix1] = child1;
                     result[prefix2] = child2;
                     result[*key] = CreateLongPathNode(key + 1, length - 1, new ValueNode(args.Value));
+                    args.Result = true;
                     args.Update = false;
                     return result;
                 }
@@ -326,6 +338,14 @@ namespace OnlyChain.Core {
                     var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(&otherPrefix, otherChild);
                     return otherChild.PrefixConcat(result);
                 }
+
+                public override string ToString() {
+                    if (prefix1 < prefix2) {
+                        return $"[{"0123456789abcdef"[prefix1]},{"0123456789abcdef"[prefix2]}]";
+                    } else {
+                        return $"[{"0123456789abcdef"[prefix2]},{"0123456789abcdef"[prefix1]}]";
+                    }
+                }
             }
 
             public sealed class LongPathNode<TBlock> : INode where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock {
@@ -357,6 +377,7 @@ namespace OnlyChain.Core {
                             CreateLongPathNode((byte*)path + (commonPrefix + 1), sizeof(TBlock) - (commonPrefix + 1), child),
                             CreateLongPathNode(key + (commonPrefix + 1), length - (commonPrefix + 1), new ValueNode(args.Value))
                         );
+                        args.Result = true;
                         args.Update = false;
                         return CreateLongPathNode(key, commonPrefix, binaryNode);
                     }
@@ -397,11 +418,11 @@ namespace OnlyChain.Core {
                     return this;
                 }
 
-                INode INode.PrefixConcat<TBlock2>(LongPathNode<TBlock2> parent) {
-                    var path = stackalloc byte[sizeof(TBlock2) + sizeof(TBlock)];
-                    parent.PathWriteTo(new Span<byte>(path, sizeof(TBlock2)));
-                    PathWriteTo(new Span<byte>(path + sizeof(TBlock2), sizeof(TBlock)));
-                    return CreateLongPathNode(path, sizeof(TBlock2) + sizeof(TBlock), child);
+                INode INode.PrefixConcat<TPrefixBlock>(LongPathNode<TPrefixBlock> parent) {
+                    var path = stackalloc byte[sizeof(TPrefixBlock) + sizeof(TBlock)];
+                    parent.PathWriteTo(new Span<byte>(path, sizeof(TPrefixBlock)));
+                    PathWriteTo(new Span<byte>(path + sizeof(TPrefixBlock), sizeof(TBlock)));
+                    return CreateLongPathNode(path, sizeof(TPrefixBlock) + sizeof(TBlock), child);
                 }
 
                 public override string ToString() {
@@ -409,7 +430,7 @@ namespace OnlyChain.Core {
                     for (int i = 0; i < sizeof(TBlock); i++) {
                         chars[i] = "0123456789abcdef"[Unsafe.Add(ref Unsafe.As<TBlock, byte>(ref path), i)];
                     }
-                    return new string(chars, 0, sizeof(TBlock)) + ", length = " + sizeof(TBlock);
+                    return new string(chars, 0, sizeof(TBlock)) + ",length=" + sizeof(TBlock);
                 }
             }
 
@@ -421,10 +442,9 @@ namespace OnlyChain.Core {
                 public INode Add(ref AddArgs args, byte* key, int length) {
                     if (args.Update) {
                         Value = args.Value;
-                        return this;
-                    } else {
-                        throw new ArgumentException();
+                        args.Result = true;
                     }
+                    return this;
                 }
 
                 public bool TryGetValue(byte* key, out TValue value) {
@@ -444,54 +464,37 @@ namespace OnlyChain.Core {
                     if (args.NeedCompareValue && !EqualityComparer<TValue>.Default.Equals(Value, args.Value)) {
                         return this;
                     }
+                    if (args.NeedSetValue) args.Value = Value;
                     args.Result = true;
                     return null;
                 }
 
-                sealed class SoleList : IReadOnlyList<KeyValuePair<TKey, TValue>> {
-                    public readonly KeyValuePair<TKey, TValue> kv;
+                public override string? ToString() => Value?.ToString();
+
+                sealed class SoleList : IReadOnlyList<KeyValuePair<TKey, TValue>>, IEnumerator<KeyValuePair<TKey, TValue>> {
+                    private bool got = false;
 
                     public SoleList(TKey key, TValue value) {
-                        kv = new KeyValuePair<TKey, TValue>(key, value);
+                        Current = new KeyValuePair<TKey, TValue>(key, value);
                     }
 
-                    public KeyValuePair<TKey, TValue> this[int index] {
-                        get {
-                            if (index != 0) throw new ArgumentOutOfRangeException();
-                            return kv;
-                        }
-                    }
+                    public KeyValuePair<TKey, TValue> this[int index] => Current;
 
                     public int Count => 1;
 
-                    public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => new Enumerator(this);
+                    public KeyValuePair<TKey, TValue> Current { get; }
+
+                    object? IEnumerator.Current => Current;
+
+                    public void Dispose() { }
+
+                    public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => this;
+
+                    public bool MoveNext() => got ? false : (got = true);
+
+                    public void Reset() => throw new NotSupportedException();
 
                     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-                    sealed class Enumerator : IEnumerator<KeyValuePair<TKey, TValue>> {
-                        private readonly SoleList list;
-                        private bool got = false;
-
-                        public Enumerator(SoleList list) {
-                            this.list = list;
-                        }
-
-                        public KeyValuePair<TKey, TValue> Current => list.kv;
-
-                        object? IEnumerator.Current => Current;
-
-                        public void Dispose() {
-                            got = false;
-                        }
-
-                        public bool MoveNext() {
-                            return got ? false : (got = true);
-                        }
-
-                        public void Reset() {
-                            got = false;
-                        }
-                    }
                 }
             }
 
@@ -537,26 +540,26 @@ namespace OnlyChain.Core {
 
         IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => Values;
 
-        private void AddOrUpdate(TKey key, TValue value, bool update) {
+        private bool AddOrUpdate(TKey key, TValue value, bool update) {
             var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
             Support.KeyToBuffer(&key, keyBuffer);
             if (root is null) {
                 root = Support.CreateLongPathNode(keyBuffer, sizeof(TKey) * 2, new Support.ValueNode(value));
                 Count++;
+                return true;
             } else {
                 var args = new Support.AddArgs {
                     Value = value,
                     Update = update,
                 };
                 root = root.Add(ref args, keyBuffer, sizeof(TKey) * 2);
-                if (!args.Update) Count++;
+                if (args.Result & !args.Update) Count++;
+                return args.Result;
             }
         }
 
         public void Add(TKey key, TValue value) {
-            try {
-                AddOrUpdate(key, value, false);
-            } catch (ArgumentException) {
+            if (!AddOrUpdate(key, value, false)) {
                 throw new ArgumentException($"键值'{key}'已存在", nameof(key));
             }
         }
@@ -564,6 +567,8 @@ namespace OnlyChain.Core {
         public void Add(KeyValuePair<TKey, TValue> item) {
             Add(item.Key, item.Value);
         }
+
+        public bool TryAdd(TKey key, TValue value) => AddOrUpdate(key, value, false);
 
         public void Clear() {
             root = null;
@@ -588,10 +593,23 @@ namespace OnlyChain.Core {
         }
 
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() {
-            if (root is null) return Enumerable.Empty<KeyValuePair<TKey, TValue>>().GetEnumerator();
-            var buffer = new byte[sizeof(TKey) * 2];
-            return root.Enumerate(0, buffer).GetEnumerator();
+            if (root is null) yield break;
+
+            var buffer = ArrayRent();
+            try {
+                foreach (var kv in root.Enumerate(0, buffer)) yield return kv;
+            } finally {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+
+            static byte[] ArrayRent() => ArrayPool<byte>.Shared.Rent(sizeof(TKey) * 2);
+
+            //return root is null
+            //    ? Enumerable.Empty<KeyValuePair<TKey, TValue>>().GetEnumerator()
+            //    : root.Enumerate(0, new byte[sizeof(TKey) * 2]).GetEnumerator();
         }
+
+
 
         public bool Remove(TKey key) {
             if (root is null) return false;
@@ -600,8 +618,6 @@ namespace OnlyChain.Core {
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.RemoveArgs {
-                NeedCompareValue = false,
-                Result = false,
             };
             root = root.Remove(ref args, keyBuffer);
             if (args.Result) {
@@ -621,13 +637,34 @@ namespace OnlyChain.Core {
             var args = new Support.RemoveArgs {
                 Value = item.Value,
                 NeedCompareValue = true,
-                Result = false,
             };
             root = root.Remove(ref args, keyBuffer);
             if (args.Result) {
                 Count--;
                 return true;
             }
+            return false;
+        }
+
+        public bool Remove(TKey key, out TValue value) {
+            if (root is null) {
+                value = default!;
+                return false;
+            }
+
+            var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
+            Support.KeyToBuffer(&key, keyBuffer);
+
+            var args = new Support.RemoveArgs {
+                NeedSetValue = true,
+            };
+            root = root.Remove(ref args, keyBuffer);
+            if (args.Result) {
+                Count--;
+                value = args.Value;
+                return true;
+            }
+            value = default!;
             return false;
         }
 
