@@ -13,6 +13,8 @@ using System.Runtime.Intrinsics.X86;
 
 namespace OnlyChain.Core {
     internal static class MerklePatriciaTreeSupport {
+        public static readonly NotSupportedException NotSupportedException = new NotSupportedException();
+
         public interface IBlock { }
 
         [StructLayout(LayoutKind.Sequential, Size = 1)] public struct Block1 : IBlock { }
@@ -157,11 +159,19 @@ namespace OnlyChain.Core {
                 bool TryGetValue(byte* key, [MaybeNullWhen(false)] out TValue value);
                 INode Add(ref AddArgs args, byte* key, int length);
                 IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key);
+                INode? Remove(ref RemoveArgs args, byte* key);
+                INode PrefixConcat<TBlock>(LongPathNode<TBlock> parent) where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock => parent;
             }
 
             public ref struct AddArgs {
                 public TValue Value;
                 public bool Update;
+            }
+
+            public ref struct RemoveArgs {
+                public TValue Value;
+                public bool NeedCompareValue;
+                public bool Result;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -216,6 +226,28 @@ namespace OnlyChain.Core {
                         }
                     }
                 }
+
+                public INode? Remove(ref RemoveArgs args, byte* key) {
+                    if (this[*key] is INode child) {
+                        this[*key] = child.Remove(ref args, key + 1);
+                        if (!args.Result || this[*key] != null) return this;
+                    } else {
+                        return this;
+                    }
+
+                    byte p1 = 0xff, p2 = 0xff;
+                    for (int i = 0; i < 16; i++) {
+                        if (this[i] is INode) {
+                            p2 = p1;
+                            p1 = (byte)i;
+                        }
+                    }
+
+                    if (p2 != 0xff) return this;
+
+                    var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(&p1, this[p1]!);
+                    return this[p1]!.PrefixConcat(result);
+                }
             }
 
             public sealed class BinaryBranchNode : INode {
@@ -267,6 +299,33 @@ namespace OnlyChain.Core {
                         foreach (var kv in child1.Enumerate(index + 1, key)) yield return kv;
                     }
                 }
+
+                public INode? Remove(ref RemoveArgs args, byte* key) {
+                    byte otherPrefix;
+                    ref INode child = ref Unsafe.AsRef<INode>(null);
+                    INode otherChild;
+                    if (prefix1 == *key) {
+                        otherPrefix = prefix2;
+                        child = ref child1;
+                        otherChild = child2;
+                        goto Find;
+                    }
+                    if (prefix2 == *key) {
+                        otherPrefix = prefix1;
+                        child = ref child2;
+                        otherChild = child1;
+                        goto Find;
+                    }
+                    return this;
+
+                Find:
+                    var newChild = child.Remove(ref args, key + 1);
+                    if (!args.Result) return this;
+                    if (newChild is INode) { child = newChild; return this; }
+
+                    var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(&otherPrefix, otherChild);
+                    return otherChild.PrefixConcat(result);
+                }
             }
 
             public sealed class LongPathNode<TBlock> : INode where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock {
@@ -313,12 +372,44 @@ namespace OnlyChain.Core {
                     foreach (var kv in child.Enumerate(index + BlockSize, key)) yield return kv;
                 }
 
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                private bool SequenceEqual(byte* key) {
+                    return new ReadOnlySpan<byte>(key, sizeof(TBlock)).SequenceEqual(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)));
+                }
+
                 public bool TryGetValue(byte* key, out TValue value) {
-                    if (new ReadOnlySpan<byte>(key, sizeof(TBlock)).SequenceEqual(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)))) {
+                    if (SequenceEqual(key)) {
                         return child.TryGetValue(key + sizeof(TBlock), out value);
                     }
                     value = default!;
                     return false;
+                }
+
+                public INode? Remove(ref RemoveArgs args, byte* key) {
+                    if (SequenceEqual(key)) {
+                        if (child.Remove(ref args, key + sizeof(TBlock)) is INode newChild) {
+                            if (!args.Result) return this;
+                            child = newChild;
+                            return child.PrefixConcat(this);
+                        }
+                        return null;
+                    }
+                    return this;
+                }
+
+                INode INode.PrefixConcat<TBlock2>(LongPathNode<TBlock2> parent) {
+                    var path = stackalloc byte[sizeof(TBlock2) + sizeof(TBlock)];
+                    parent.PathWriteTo(new Span<byte>(path, sizeof(TBlock2)));
+                    PathWriteTo(new Span<byte>(path + sizeof(TBlock2), sizeof(TBlock)));
+                    return CreateLongPathNode(path, sizeof(TBlock2) + sizeof(TBlock), child);
+                }
+
+                public override string ToString() {
+                    var chars = stackalloc char[sizeof(TBlock)];
+                    for (int i = 0; i < sizeof(TBlock); i++) {
+                        chars[i] = "0123456789abcdef"[Unsafe.Add(ref Unsafe.As<TBlock, byte>(ref path), i)];
+                    }
+                    return new string(chars, 0, sizeof(TBlock)) + ", length = " + sizeof(TBlock);
                 }
             }
 
@@ -347,6 +438,14 @@ namespace OnlyChain.Core {
                         BufferToKey(buffer, &tempKey);
                     }
                     return new SoleList(tempKey, Value);
+                }
+
+                public INode? Remove(ref RemoveArgs args, byte* key) {
+                    if (args.NeedCompareValue && !EqualityComparer<TValue>.Default.Equals(Value, args.Value)) {
+                        return this;
+                    }
+                    args.Result = true;
+                    return null;
                 }
 
                 sealed class SoleList : IReadOnlyList<KeyValuePair<TKey, TValue>> {
@@ -415,7 +514,6 @@ namespace OnlyChain.Core {
 
     unsafe public partial class MerklePatriciaTree<TKey, TValue> : IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue> where TKey : unmanaged {
         private Support.INode? root = null;
-        private int count = 0;
 
         public TValue this[TKey key] {
             get {
@@ -431,7 +529,7 @@ namespace OnlyChain.Core {
 
         public ICollection<TValue> Values => new ValueEnumerator(this);
 
-        public int Count => count;
+        public int Count { get; private set; } = 0;
 
         public bool IsReadOnly => false;
 
@@ -442,17 +540,16 @@ namespace OnlyChain.Core {
         private void AddOrUpdate(TKey key, TValue value, bool update) {
             var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
             Support.KeyToBuffer(&key, keyBuffer);
-            ReadOnlySpan<byte> span = new ReadOnlySpan<byte>(keyBuffer, sizeof(TKey) * 2);
             if (root is null) {
                 root = Support.CreateLongPathNode(keyBuffer, sizeof(TKey) * 2, new Support.ValueNode(value));
-                count++;
+                Count++;
             } else {
                 var args = new Support.AddArgs {
                     Value = value,
                     Update = update,
                 };
                 root = root.Add(ref args, keyBuffer, sizeof(TKey) * 2);
-                if (!args.Update) count++;
+                if (!args.Update) Count++;
             }
         }
 
@@ -469,7 +566,8 @@ namespace OnlyChain.Core {
         }
 
         public void Clear() {
-            throw new NotImplementedException();
+            root = null;
+            Count = 0;
         }
 
         public bool Contains(KeyValuePair<TKey, TValue> item) {
@@ -482,7 +580,7 @@ namespace OnlyChain.Core {
         public bool ContainsKey(TKey key) => TryGetValue(key, out _);
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
-            if (arrayIndex + count < array.Length) throw new ArgumentOutOfRangeException();
+            if (arrayIndex + Count < array.Length) throw new ArgumentOutOfRangeException();
             int i = 0;
             foreach (var kv in this) {
                 array[arrayIndex + i++] = kv;
@@ -496,11 +594,41 @@ namespace OnlyChain.Core {
         }
 
         public bool Remove(TKey key) {
-            throw new NotImplementedException();
+            if (root is null) return false;
+
+            var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
+            Support.KeyToBuffer(&key, keyBuffer);
+
+            var args = new Support.RemoveArgs {
+                NeedCompareValue = false,
+                Result = false,
+            };
+            root = root.Remove(ref args, keyBuffer);
+            if (args.Result) {
+                Count--;
+                return true;
+            }
+            return false;
         }
 
         public bool Remove(KeyValuePair<TKey, TValue> item) {
-            throw new NotImplementedException();
+            if (root is null) return false;
+
+            TKey key = item.Key;
+            var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
+            Support.KeyToBuffer(&key, keyBuffer);
+
+            var args = new Support.RemoveArgs {
+                Value = item.Value,
+                NeedCompareValue = true,
+                Result = false,
+            };
+            root = root.Remove(ref args, keyBuffer);
+            if (args.Result) {
+                Count--;
+                return true;
+            }
+            return false;
         }
 
         public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value) {
@@ -528,11 +656,11 @@ namespace OnlyChain.Core {
             public bool IsReadOnly => true;
 
             public void Add(TKey item) {
-                throw new NotImplementedException();
+                throw MerklePatriciaTreeSupport.NotSupportedException;
             }
 
             public void Clear() {
-                throw new NotImplementedException();
+                throw MerklePatriciaTreeSupport.NotSupportedException;
             }
 
             public bool Contains(TKey item) {
@@ -550,7 +678,7 @@ namespace OnlyChain.Core {
             public IEnumerator<TKey> GetEnumerator() => source.Select(kv => kv.Key).GetEnumerator();
 
             public bool Remove(TKey item) {
-                throw new NotImplementedException();
+                throw MerklePatriciaTreeSupport.NotSupportedException;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -568,11 +696,11 @@ namespace OnlyChain.Core {
             public bool IsReadOnly => true;
 
             public void Add(TValue item) {
-                throw new NotImplementedException();
+                throw MerklePatriciaTreeSupport.NotSupportedException;
             }
 
             public void Clear() {
-                throw new NotImplementedException();
+                throw MerklePatriciaTreeSupport.NotSupportedException;
             }
 
             public bool Contains(TValue item) => source.Select(kv => kv.Value).Contains(item);
@@ -588,7 +716,7 @@ namespace OnlyChain.Core {
             public IEnumerator<TValue> GetEnumerator() => source.Select(kv => kv.Value).GetEnumerator();
 
             public bool Remove(TValue item) {
-                throw new NotImplementedException();
+                throw MerklePatriciaTreeSupport.NotSupportedException;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
