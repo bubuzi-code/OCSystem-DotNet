@@ -42,50 +42,37 @@ namespace OnlyChain {
 
         static void Main(string[] args) {
             var sw = new System.Diagnostics.Stopwatch();
-            var keys = new Address[100000];
-            for (int i = 0; i < keys.Length; i++) keys[i] = Address.Random();
-            //var memSize = GC.GetTotalMemory(true);
+            while (true) {
+                var keys = new Address[1000000];
+                for (int i = 0; i < keys.Length; i++) keys[i] = Address.Random();
+                //var memSize = GC.GetTotalMemory(true);
 
-            // 019251639cb90c9d59f2108524d377315d781caf
-            // 8750f447c8355658a4724a129592b5f2c21b87dc
-            // 0f77cce7599bf8bb0b49f00c378410d861bad2af
-            //keys[0] = "019251639cb90c9d59f2108524d377315d781caf";
-            //keys[1] = "8750f447c8355658a4724a129592b5f2c21b87dc";
-            //keys[2] = "0f77cce7599bf8bb0b49f00c378410d861bad2af";
+                var tree = new MerklePatriciaTree<Address, string>();
+                sw.Restart();
+                for (int i = 0; i < keys.Length; i++) {
+                    tree.Add(keys[i], keys[i].ToString());
+                }
+                sw.Stop();
+                Console.WriteLine(sw.Elapsed);
+                //Console.WriteLine((GC.GetTotalMemory(true) - memSize) / 1024.0 / 1024.0);
 
-            var tree = new MerklePatriciaTree<Address, string>();
-            sw.Restart();
-            for (int i = 0; i < keys.Length; i++) {
-                tree.Add(keys[i], keys[i].ToString());
+
+                sw.Restart();
+                for (int i = 0; i < keys.Length; i++) {
+                    if (!tree.TryGetValue(keys[i], out _)) throw new Exception();
+                }
+                sw.Stop();
+                Console.WriteLine(sw.Elapsed);
+
+                sw.Restart();
+                foreach (var kv in tree) ;
+                sw.Stop();
+                Console.WriteLine(sw.Elapsed);
+
+                GC.Collect();
+
+                Console.WriteLine("====================================");
             }
-            sw.Stop();
-            Console.WriteLine(sw.Elapsed);
-            //Console.WriteLine((GC.GetTotalMemory(true) - memSize) / 1024.0 / 1024.0);
-
-
-            sw.Restart();
-            for (int i = 0; i < keys.Length; i++) {
-                if (!tree.TryGetValue(keys[i], out _)) throw new Exception();
-            }
-            sw.Stop();
-            Console.WriteLine(sw.Elapsed);
-
-            sw.Restart();
-            foreach (var kv in tree) ;
-            sw.Stop();
-            Console.WriteLine(sw.Elapsed);
-
-            sw.Restart();
-            for (int i = 0; i < keys.Length; i++) {
-                if (!tree.Remove(keys[i])) throw new Exception();
-            }
-            sw.Stop();
-            Console.WriteLine(sw.Elapsed);
-
-            Console.WriteLine(tree.Count);
-
-            Console.WriteLine("====================================");
-
             Thread.Sleep(-1);
             //Console.WriteLine(tree.Count);
             return;
