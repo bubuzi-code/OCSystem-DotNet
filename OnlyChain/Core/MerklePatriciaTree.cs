@@ -126,164 +126,175 @@ namespace OnlyChain.Core {
         }
     }
 
-    unsafe partial class MerklePatriciaTree<TKey, TValue, TState> {
+    unsafe partial class MerklePatriciaTree<TKey, TValue, THash> {
         internal static class Support {
-            delegate INode CreateNodeHandler(byte* key, INode value);
+            delegate Node CreateNodeHandler(int generation, byte* key, Node value);
 
             static readonly CreateNodeHandler[] createNodeHandlers = {
-                (key, child) => child,
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block1>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block2>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block3>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block4>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block5>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block6>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block7>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block8>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block9>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block10>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block11>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block12>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block13>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block14>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block15>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block16>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block17>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block18>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block19>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block20>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block21>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block22>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block23>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block24>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block25>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block26>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block27>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block28>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block29>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block30>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block31>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block32>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block33>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block34>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block35>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block36>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block37>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block38>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block39>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block40>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block41>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block42>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block43>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block44>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block45>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block46>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block47>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block48>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block49>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block50>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block51>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block52>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block53>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block54>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block55>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block56>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block57>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block58>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block59>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block60>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block61>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block62>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block63>(key, child),
-                (key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block64>(key, child),
+                (generation, key, child) => child,
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block1>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block2>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block3>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block4>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block5>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block6>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block7>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block8>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block9>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block10>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block11>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block12>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block13>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block14>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block15>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block16>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block17>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block18>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block19>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block20>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block21>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block22>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block23>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block24>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block25>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block26>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block27>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block28>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block29>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block30>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block31>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block32>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block33>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block34>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block35>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block36>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block37>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block38>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block39>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block40>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block41>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block42>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block43>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block44>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block45>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block46>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block47>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block48>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block49>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block50>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block51>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block52>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block53>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block54>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block55>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block56>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block57>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block58>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block59>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block60>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block61>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block62>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block63>(generation, key, child),
+                (generation, key, child) => new LongPathNode<MerklePatriciaTreeSupport.Block64>(generation, key, child),
             };
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             static ValueNode CreateValue(ref AddArgs args) {
                 args.Result = true;
                 args.Update = false;
-                return new ValueNode(args.Value);
-            }
-
-            public interface INode {
-                bool TryGetValue(byte* key, [MaybeNullWhen(false)] out TValue value);
-                INode Add(ref AddArgs args, byte* key, int length);
-                IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key);
-                INode? Remove(ref RemoveArgs args, byte* key);
-                INode PrefixConcat<TBlock>(LongPathNode<TBlock> parent) where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock => parent;
-            }
-
-            public readonly struct SwitchAction {
-                private readonly Action<INode, INode?> action;
-                private readonly INode target;
-                private readonly INode? oldChild, newChild;
-
-                public SwitchAction(Action<INode, INode?> action, INode target, INode? oldChild, INode? newChild) {
-                    this.action = action;
-                    this.target = target;
-                    this.oldChild = oldChild;
-                    this.newChild = newChild;
-                }
-
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                public void Forward() => action(target, newChild);
-
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                public void Back() => action(target, oldChild);
+                return new ValueNode(args.Generation, args.HashAlgorithm.ComputeHash(args.Value), args.Value);
             }
 
             public ref struct AddArgs {
                 public TValue Value;
-                public SwitchAction Switch;
+                public IHashAlgorithm<TValue, THash> HashAlgorithm;
+                public int Generation;
                 public bool Result;
                 public bool Update;
             }
 
             public ref struct RemoveArgs {
                 public TValue Value;
-                public SwitchAction Switch;
+                public IHashAlgorithm<TValue, THash> HashAlgorithm;
+                public int Generation;
                 public bool Result;
                 public bool NeedCompareValue;
                 public bool NeedSetValue;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal static INode CreateLongPathNode(byte* key, int length, INode child) => createNodeHandlers[length](key, child);
+            internal static Node CreateLongPathNode(int generation, byte* key, int length, Node child) => createNodeHandlers[length](generation, key, child);
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static void SetNewChild(ref SwitchAction @switch, INode node, ref INode? childField, INode? newChild, Action<INode, INode?> switchAction) {
-                if (childField == newChild) return;
-                @switch = new SwitchAction(switchAction, node, childField, newChild);
-                childField = newChild;
+
+            public abstract class Node {
+                public readonly int Generation;
+                public THash Hash;
+
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public Node(int generation, THash hash) {
+                    Generation = generation;
+                    Hash = hash;
+                }
+
+                public Node(int generation) {
+                    Generation = generation;
+                }
+
+                public abstract Node Add(ref AddArgs args, byte* key, int length);
+                public abstract IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key);
+                public abstract Node? Remove(ref RemoveArgs args, byte* key);
+                public abstract bool TryGetValue(byte* key, [MaybeNullWhen(false)] out TValue value);
+                public virtual Node PrefixConcat<TBlock>(LongPathNode<TBlock> parent) where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock => parent;
             }
 
-            public sealed class EmptyNode : INode {
-                private INode? child;
+            public sealed class EmptyNode : Node {
+                private Node? child;
 
-                public INode Add(ref AddArgs args, byte* key, int length) {
-                    INode newChild;
+                public EmptyNode(int generation, THash hash) : base(generation, hash) => child = null;
+
+                private EmptyNode(int generation, Node child) : base(generation, child.Hash) => this.child = child;
+
+                public override Node Add(ref AddArgs args, byte* key, int length) {
+                    Node newChild;
                     if (child is null) {
-                        newChild = CreateLongPathNode(key, length, CreateValue(ref args));
+                        newChild = CreateLongPathNode(args.Generation, key, length, CreateValue(ref args));
                     } else {
                         newChild = child.Add(ref args, key, length);
                     }
-                    SetNewChild(ref args.Switch, this, ref child, newChild, switchAction);
-                    return this;
-                }
 
-                public IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
-                    return child is null ? Enumerable.Empty<KeyValuePair<TKey, TValue>>() : child.Enumerate(index, key);
-                }
-
-                public INode? Remove(ref RemoveArgs args, byte* key) {
-                    if (child != null) {
-                        INode? newChild = child.Remove(ref args, key);
-                        SetNewChild(ref args.Switch, this, ref child, newChild, switchAction);
+                    if (args.Result) {
+                        if (Generation == args.Generation) {
+                            child = newChild;
+                        } else if (child != newChild) {
+                            return new EmptyNode(args.Generation, newChild);
+                        }
                     }
                     return this;
                 }
 
-                public bool TryGetValue(byte* key, out TValue value) {
+                public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
+                    return child is null ? Enumerable.Empty<KeyValuePair<TKey, TValue>>() : child.Enumerate(index, key);
+                }
+
+                public override Node? Remove(ref RemoveArgs args, byte* key) {
+                    if (child != null) {
+                        Node? newChild = child.Remove(ref args, key);
+                        if (args.Result) {
+                            if (Generation == args.Generation) {
+                                child = newChild;
+                            } else if (child != newChild) {
+                                if (newChild != null) {
+                                    return new EmptyNode(args.Generation, newChild);
+                                } else {
+                                    return new EmptyNode(args.Generation, args.HashAlgorithm.ComputeHash(ReadOnlySpan<THash>.Empty));
+                                }
+                            }
+                        }
+                    }
+                    return this;
+                }
+
+                public override bool TryGetValue(byte* key, out TValue value) {
                     if (child is null) {
                         value = default!;
                         return false;
@@ -291,69 +302,101 @@ namespace OnlyChain.Core {
                     return child.TryGetValue(key, out value);
                 }
 
-                public void Clear() {
-                    child = null;
+                public EmptyNode Clear(ref RemoveArgs args) {
+                    if (child != null) {
+                        if (Generation == args.Generation) {
+                            child = null;
+                        } else {
+                            return new EmptyNode(args.Generation, args.HashAlgorithm.ComputeHash(ReadOnlySpan<THash>.Empty));
+                        }
+                    }
+                    return this;
                 }
-
-                static readonly Action<INode, INode?> switchAction = (@this, child) => Unsafe.As<EmptyNode>(@this).child = child;
             }
 
-            [StructLayout(LayoutKind.Sequential)]
-            public sealed class PrefixMapNode : INode {
-                private INode? child_0,
-                               child_1,
-                               child_2,
-                               child_3,
-                               child_4,
-                               child_5,
-                               child_6,
-                               child_7,
-                               child_8,
-                               child_9,
-                               child_a,
-                               child_b,
-                               child_c,
-                               child_d,
-                               child_e,
-                               child_f;
+            public sealed class PrefixMapNode : Node {
+                [StructLayout(LayoutKind.Sequential)]
+                struct Children {
+                    [SuppressMessage("样式", "IDE0044:添加只读修饰符", Justification = "<挂起>")]
+                    public Node? child_0,
+                                 child_1,
+                                 child_2,
+                                 child_3,
+                                 child_4,
+                                 child_5,
+                                 child_6,
+                                 child_7,
+                                 child_8,
+                                 child_9,
+                                 child_a,
+                                 child_b,
+                                 child_c,
+                                 child_d,
+                                 child_e,
+                                 child_f;
+                }
 
-                internal ref INode? this[int i] => ref Unsafe.Add(ref child_0, i);
+                private Children children;
 
-                public bool TryGetValue(byte* key, out TValue value) {
-                    if (this[*key] is INode child) {
+
+                internal ref Node? this[int i] => ref Unsafe.Add(ref children.child_0, i);
+
+                public PrefixMapNode(int generation) : base(generation) { }
+
+                private PrefixMapNode(int generation, PrefixMapNode other) : base(generation) {
+                    MemoryMarshal.CreateReadOnlySpan(ref other.children.child_0, 16).CopyTo(MemoryMarshal.CreateSpan(ref children.child_0, 16));
+                }
+
+                public override bool TryGetValue(byte* key, out TValue value) {
+                    if (this[*key] is Node child) {
                         return child.TryGetValue(key + 1, out value);
                     }
                     value = default!;
                     return false;
                 }
 
-                public INode Add(ref AddArgs args, byte* key, int length) {
-                    INode? newChild;
-                    if (this[*key] is INode child) {
+                public override Node Add(ref AddArgs args, byte* key, int length) {
+                    Node? newChild;
+                    if (this[*key] is Node child) {
                         newChild = child.Add(ref args, key + 1, length - 1);
                     } else {
-                        newChild = CreateLongPathNode(key + 1, length - 1, CreateValue(ref args));
+                        newChild = CreateLongPathNode(args.Generation, key + 1, length - 1, CreateValue(ref args));
                     }
-                    SetNewChild(ref args.Switch, this, ref this[*key], newChild, switchActions[*key]);
+
+                    if (args.Result) {
+                        if (Generation == args.Generation) {
+                            this[*key] = newChild;
+                        } else if (this[*key] != newChild) {
+                            var clone = new PrefixMapNode(args.Generation, this);
+                            clone[*key] = newChild;
+                            return clone;
+                        }
+                    }
                     return this;
                 }
 
-                public IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
+                public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
                     for (int i = 0; i < 16; i++) {
-                        if (this[i] is INode child) {
+                        if (this[i] is Node child) {
                             key[index] = (byte)i;
                             foreach (var kv in child.Enumerate(index + 1, key)) yield return kv;
                         }
                     }
                 }
 
-                public INode? Remove(ref RemoveArgs args, byte* key) {
-                    if (this[*key] is INode child) {
-                        INode? newChild = child.Remove(ref args, key + 1);
+                public override Node? Remove(ref RemoveArgs args, byte* key) {
+                    if (this[*key] is Node child) {
+                        Node? newChild = child.Remove(ref args, key + 1);
                         if (!args.Result) return this;
                         if (newChild != null) {
-                            SetNewChild(ref args.Switch, this, ref this[*key], newChild, switchActions[*key]);
-                            return this;
+                            if (Generation == args.Generation) {
+                                this[*key] = newChild;
+                                return this;
+                            } else if (this[*key] != newChild) {
+                                var clone = new PrefixMapNode(args.Generation, this);
+                                clone[*key] = newChild;
+                                return clone;
+                            }
                         }
                     } else {
                         return this;
@@ -362,87 +405,93 @@ namespace OnlyChain.Core {
                     // newChild == null
                     byte p1 = 0xff, p2 = 0xff;
                     for (int i = 0; i < 16; i++) {
-                        if (this[i] is INode) {
+                        if (this[i] is Node) {
                             p2 = p1;
                             p1 = (byte)i;
                         }
                     }
 
                     if (p2 != 0xff) { // 移除后的子节点数量 >= 2
-                        SetNewChild(ref args.Switch, this, ref this[*key], null, switchActions[*key]);
-                        return this;
+                        if (Generation == args.Generation) {
+                            this[*key] = null;
+                            return this;
+                        } else {
+                            var clone = new PrefixMapNode(args.Generation, this);
+                            clone[*key] = null;
+                            return clone;
+                        }
                     }
 
-                    var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(&p1, this[p1]!);
+                    var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(args.Generation, &p1, this[p1]!);
                     return this[p1]!.PrefixConcat(result);
                 }
 
                 public override string ToString() {
                     var list = new List<char>(16);
                     for (int i = 0; i < 16; i++) {
-                        if (this[i] is INode) list.Add("0123456789abcdef"[i]);
+                        if (this[i] is Node) list.Add("0123456789abcdef"[i]);
                     }
                     return $"[{string.Join(",", list)}],count={list.Count}";
                 }
-
-                static readonly Action<INode, INode?>[] switchActions = {
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_0 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_1 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_2 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_3 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_4 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_5 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_6 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_7 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_8 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_9 = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_a = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_b = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_c = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_d = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_e = child,
-                    (@this, child) => Unsafe.As<PrefixMapNode>(@this).child_f = child,
-                };
             }
 
-            public sealed class BinaryBranchNode : INode {
+            public sealed class BinaryBranchNode : Node {
                 private readonly byte prefix1, prefix2;
-                private INode child1, child2;
+                private Node child1, child2;
 
-                public BinaryBranchNode(byte prefix1, byte prefix2, INode child1, INode child2) {
-                    this.prefix1 = prefix1;
-                    this.prefix2 = prefix2;
-                    this.child1 = child1;
-                    this.child2 = child2;
+                public BinaryBranchNode(int generation, byte prefix1, byte prefix2, Node child1, Node child2) : base(generation) {
+                    if (prefix1 < prefix2) {
+                        this.prefix1 = prefix1;
+                        this.prefix2 = prefix2;
+                        this.child1 = child1;
+                        this.child2 = child2;
+                    } else {
+                        this.prefix1 = prefix2;
+                        this.prefix2 = prefix1;
+                        this.child1 = child2;
+                        this.child2 = child1;
+                    }
                 }
 
-                public bool TryGetValue(byte* key, out TValue value) {
+                public override bool TryGetValue(byte* key, out TValue value) {
                     if (*key == prefix1) return child1.TryGetValue(key + 1, out value);
                     if (*key == prefix2) return child2.TryGetValue(key + 1, out value);
                     value = default!;
                     return false;
                 }
 
-                public INode Add(ref AddArgs args, byte* key, int length) {
+                public override Node Add(ref AddArgs args, byte* key, int length) {
                     if (*key == prefix1) {
-                        INode? newChild = child1.Add(ref args, key + 1, length - 1);
-                        SetNewChild(ref args.Switch, this, ref child1!, newChild, switchAction1);
+                        Node? newChild = child1.Add(ref args, key + 1, length - 1);
+                        if (args.Result) {
+                            if (Generation == args.Generation) {
+                                child1 = newChild;
+                            } else if (child1 != newChild) {
+                                return new BinaryBranchNode(args.Generation, prefix1, prefix2, newChild, child2);
+                            }
+                        }
                         return this;
                     }
                     if (*key == prefix2) {
-                        INode? newChild = child2.Add(ref args, key + 1, length - 1);
-                        SetNewChild(ref args.Switch, this, ref child2!, newChild, switchAction2);
+                        Node? newChild = child2.Add(ref args, key + 1, length - 1);
+                        if (args.Result) {
+                            if (Generation == args.Generation) {
+                                child2 = newChild;
+                            } else if (child2 != newChild) {
+                                return new BinaryBranchNode(args.Generation, prefix1, prefix2, child1, newChild);
+                            }
+                        }
                         return this;
                     }
 
-                    var result = new PrefixMapNode();
+                    var result = new PrefixMapNode(args.Generation);
                     result[prefix1] = child1;
                     result[prefix2] = child2;
-                    result[*key] = CreateLongPathNode(key + 1, length - 1, CreateValue(ref args));
+                    result[*key] = CreateLongPathNode(args.Generation, key + 1, length - 1, CreateValue(ref args));
                     return result;
                 }
 
-                public IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
+                public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
                     if (prefix1 < prefix2) {
                         key[index] = prefix1;
                         foreach (var kv in child1.Enumerate(index + 1, key)) yield return kv;
@@ -456,33 +505,34 @@ namespace OnlyChain.Core {
                     }
                 }
 
-                public INode? Remove(ref RemoveArgs args, byte* key) {
-                    byte otherPrefix;
-                    ref INode child = ref Unsafe.AsRef<INode>(null);
-                    INode otherChild;
-                    Action<INode, INode?> switchAction;
-                    if (prefix1 == *key) {
+                public override Node? Remove(ref RemoveArgs args, byte* key) {
+                    byte thisPrefix = *key, otherPrefix;
+                    ref var child = ref Unsafe.AsRef<Node>(null);
+                    Node otherChild;
+                    if (prefix1 == thisPrefix) {
                         otherPrefix = prefix2;
                         child = ref child1;
                         otherChild = child2;
-                        switchAction = switchAction1;
-                    } else if (prefix2 == *key) {
+                    } else if (prefix2 == thisPrefix) {
                         otherPrefix = prefix1;
                         child = ref child2;
                         otherChild = child1;
-                        switchAction = switchAction2;
                     } else {
                         return this;
                     }
 
                     var newChild = child.Remove(ref args, key + 1);
                     if (!args.Result) return this;
-                    if (newChild is INode) {
-                        SetNewChild(ref args.Switch, this, ref child!, newChild, switchAction);
+                    if (newChild is Node) {
+                        if (Generation == args.Generation) {
+                            child = newChild;
+                        } else if (child != newChild) {
+                            return new BinaryBranchNode(args.Generation, thisPrefix, otherPrefix, newChild, otherChild);
+                        }
                         return this;
                     }
 
-                    var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(&otherPrefix, otherChild);
+                    var result = new LongPathNode<MerklePatriciaTreeSupport.Block1>(args.Generation, &otherPrefix, otherChild);
                     return otherChild.PrefixConcat(result);
                 }
 
@@ -493,41 +543,45 @@ namespace OnlyChain.Core {
                         return $"[{"0123456789abcdef"[prefix2]},{"0123456789abcdef"[prefix1]}]";
                     }
                 }
-
-                static readonly Action<INode, INode?> switchAction1 = (@this, child) => Unsafe.As<BinaryBranchNode>(@this).child1 = child!;
-                static readonly Action<INode, INode?> switchAction2 = (@this, child) => Unsafe.As<BinaryBranchNode>(@this).child2 = child!;
             }
 
-            public sealed class LongPathNode<TBlock> : INode where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock {
+            public sealed class LongPathNode<TBlock> : Node where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock {
                 static readonly int BlockSize = sizeof(TBlock);
 
                 private TBlock path;
-                private INode child;
+                private Node child;
 
-                public LongPathNode(byte* key, INode child) {
+                public LongPathNode(int generation, byte* key, Node child) : base(generation) {
                     new ReadOnlySpan<byte>(key, sizeof(TBlock)).CopyTo(MemoryMarshal.CreateSpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)));
                     this.child = child;
                 }
 
-                public INode Add(ref AddArgs args, byte* key, int length) {
+                public override Node Add(ref AddArgs args, byte* key, int length) {
                     fixed (TBlock* path = &this.path) {
                         int commonPrefix = 0;
                         for (; commonPrefix < sizeof(TBlock); commonPrefix++) {
                             if (((byte*)path)[commonPrefix] != key[commonPrefix]) goto Split;
                         }
 
-                        INode? newChild = child.Add(ref args, key + sizeof(TBlock), length - sizeof(TBlock));
-                        SetNewChild(ref args.Switch, this, ref child!, newChild, switchAction);
+                        Node newChild = child.Add(ref args, key + sizeof(TBlock), length - sizeof(TBlock));
+                        if (args.Result) {
+                            if (Generation == args.Generation) {
+                                child = newChild;
+                            } else if (child != newChild) {
+                                return new LongPathNode<TBlock>(args.Generation, key, newChild);
+                            }
+                        }
                         return this;
 
                     Split:
                         var binaryNode = new BinaryBranchNode(
+                            args.Generation,
                             ((byte*)path)[commonPrefix],
                             key[commonPrefix],
-                            CreateLongPathNode((byte*)path + (commonPrefix + 1), sizeof(TBlock) - (commonPrefix + 1), child),
-                            CreateLongPathNode(key + (commonPrefix + 1), length - (commonPrefix + 1), CreateValue(ref args))
+                            CreateLongPathNode(args.Generation, (byte*)path + (commonPrefix + 1), sizeof(TBlock) - (commonPrefix + 1), child),
+                            CreateLongPathNode(args.Generation, key + (commonPrefix + 1), length - (commonPrefix + 1), CreateValue(ref args))
                         );
-                        return CreateLongPathNode(key, commonPrefix, binaryNode);
+                        return CreateLongPathNode(args.Generation, key, commonPrefix, binaryNode);
                     }
                 }
 
@@ -536,7 +590,7 @@ namespace OnlyChain.Core {
                     MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)).CopyTo(span);
                 }
 
-                public IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
+                public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
                     PathWriteTo(key.AsSpan(index));
                     foreach (var kv in child.Enumerate(index + BlockSize, key)) yield return kv;
                 }
@@ -546,7 +600,7 @@ namespace OnlyChain.Core {
                     return new ReadOnlySpan<byte>(key, sizeof(TBlock)).SequenceEqual(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)));
                 }
 
-                public bool TryGetValue(byte* key, out TValue value) {
+                public override bool TryGetValue(byte* key, out TValue value) {
                     if (SequenceEqual(key)) {
                         return child.TryGetValue(key + sizeof(TBlock), out value);
                     }
@@ -554,26 +608,27 @@ namespace OnlyChain.Core {
                     return false;
                 }
 
-                public INode? Remove(ref RemoveArgs args, byte* key) {
+                public override Node? Remove(ref RemoveArgs args, byte* key) {
                     if (SequenceEqual(key)) {
-                        if (child.Remove(ref args, key + sizeof(TBlock)) is INode newChild) {
-                            if (!args.Result) return this;
-                            var result = newChild.PrefixConcat(this);
-                            if (result == this) {
-                                SetNewChild(ref args.Switch, this, ref child!, newChild, switchAction);
+                        var newChild = child.Remove(ref args, key + sizeof(TBlock));
+                        if (args.Result) {
+                            if (newChild is null) return null;
+
+                            if (Generation == args.Generation) {
+                                child = newChild;
+                            } else if (child != newChild) {
+                                return new LongPathNode<TBlock>(args.Generation, key, newChild);
                             }
-                            return result;
                         }
-                        return null;
                     }
                     return this;
                 }
 
-                INode INode.PrefixConcat<TPrefixBlock>(LongPathNode<TPrefixBlock> parent) {
+                public override Node PrefixConcat<TPrefixBlock>(LongPathNode<TPrefixBlock> parent) {
                     var path = stackalloc byte[sizeof(TPrefixBlock) + sizeof(TBlock)];
                     parent.PathWriteTo(new Span<byte>(path, sizeof(TPrefixBlock)));
                     PathWriteTo(new Span<byte>(path + sizeof(TPrefixBlock), sizeof(TBlock)));
-                    return CreateLongPathNode(path, sizeof(TPrefixBlock) + sizeof(TBlock), child);
+                    return CreateLongPathNode(parent.Generation, path, sizeof(TPrefixBlock) + sizeof(TBlock), child);
                 }
 
                 public override string ToString() {
@@ -583,29 +638,32 @@ namespace OnlyChain.Core {
                     }
                     return new string(chars, 0, sizeof(TBlock)) + ",length=" + sizeof(TBlock);
                 }
-
-                static readonly Action<INode, INode?> switchAction = (@this, child) => Unsafe.As<LongPathNode<TBlock>>(@this).child = child!;
             }
 
-            public sealed class ValueNode : INode {
-                private readonly TValue value;
+            public sealed class ValueNode : Node {
+                private TValue value;
 
-                public ValueNode(TValue value) => this.value = value;
+                public ValueNode(int generation, THash hash, TValue value) : base(generation, hash) => this.value = value;
 
-                public INode Add(ref AddArgs args, byte* key, int length) {
+                public override Node Add(ref AddArgs args, byte* key, int length) {
                     if (args.Update) {
                         args.Result = true;
-                        return new ValueNode(args.Value);
+                        if (Generation == args.Generation) {
+                            value = args.Value;
+                            Hash = args.HashAlgorithm.ComputeHash(args.Value);
+                        } else {
+                            return new ValueNode(args.Generation, args.HashAlgorithm.ComputeHash(args.Value), args.Value);
+                        }
                     }
                     return this;
                 }
 
-                public bool TryGetValue(byte* key, out TValue value) {
+                public override bool TryGetValue(byte* key, out TValue value) {
                     value = this.value;
                     return true;
                 }
 
-                public IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
+                public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
                     TKey tempKey = default;
                     fixed (byte* buffer = key) {
                         BufferToKey(buffer, &tempKey);
@@ -613,7 +671,7 @@ namespace OnlyChain.Core {
                     return new MerklePatriciaTreeSupport.SoleList<KeyValuePair<TKey, TValue>>(new KeyValuePair<TKey, TValue>(tempKey, value));
                 }
 
-                public INode? Remove(ref RemoveArgs args, byte* key) {
+                public override Node? Remove(ref RemoveArgs args, byte* key) {
                     if (args.NeedCompareValue && !EqualityComparer<TValue>.Default.Equals(value, args.Value)) {
                         return this;
                     }
@@ -640,210 +698,31 @@ namespace OnlyChain.Core {
                 }
             }
         }
-
-        internal sealed class StateMachine {
-            interface ISmallDictionary : IDictionary<TState, SwitchInfo> {
-                bool ICollection<KeyValuePair<TState, SwitchInfo>>.IsReadOnly => true;
-                void ICollection<KeyValuePair<TState, SwitchInfo>>.Add(KeyValuePair<TState, SwitchInfo> item) => throw MerklePatriciaTreeSupport.NotSupportedException;
-                void ICollection<KeyValuePair<TState, SwitchInfo>>.Clear() => throw MerklePatriciaTreeSupport.NotSupportedException;
-                bool ICollection<KeyValuePair<TState, SwitchInfo>>.Remove(KeyValuePair<TState, SwitchInfo> item) => throw MerklePatriciaTreeSupport.NotSupportedException;
-
-                void IDictionary<TState, SwitchInfo>.Add(TState key, SwitchInfo value) => throw MerklePatriciaTreeSupport.NotSupportedException;
-                bool IDictionary<TState, SwitchInfo>.Remove(TState key) => throw MerklePatriciaTreeSupport.NotSupportedException;
-
-                IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-            }
-
-            sealed class EmptyDictionary : ISmallDictionary {
-                public static readonly IDictionary<TState, SwitchInfo> Default = new EmptyDictionary();
-
-                private EmptyDictionary() { }
-
-                SwitchInfo IDictionary<TState, SwitchInfo>.this[TState key] {
-                    get => throw MerklePatriciaTreeSupport.NotSupportedException;
-                    set => throw MerklePatriciaTreeSupport.NotSupportedException;
-                }
-
-                public ICollection<TState> Keys => Array.Empty<TState>();
-
-                public ICollection<SwitchInfo> Values => Array.Empty<SwitchInfo>();
-
-                public int Count => 0;
-
-                public bool Contains(KeyValuePair<TState, SwitchInfo> item) => false;
-
-                public bool ContainsKey(TState key) => false;
-
-                public void CopyTo(KeyValuePair<TState, SwitchInfo>[] array, int arrayIndex) { }
-
-                public IEnumerator<KeyValuePair<TState, SwitchInfo>> GetEnumerator() => Enumerable.Empty<KeyValuePair<TState, SwitchInfo>>().GetEnumerator();
-
-                public bool TryGetValue(TState key, [MaybeNullWhen(false)] out SwitchInfo value) {
-                    value = default!;
-                    return false;
-                }
-            }
-
-            sealed class SoleDictionary : ISmallDictionary, MerklePatriciaTreeSupport.ISoleReadOnlyList<KeyValuePair<TState, SwitchInfo>> {
-                private readonly KeyValuePair<TState, SwitchInfo> kv;
-
-                public TState Key => kv.Key;
-                public SwitchInfo Value => kv.Value;
-
-                bool MerklePatriciaTreeSupport.ISoleReadOnlyList<KeyValuePair<TState, SwitchInfo>>.Got { get; set; } = false;
-
-                KeyValuePair<TState, SwitchInfo> IEnumerator<KeyValuePair<TState, SwitchInfo>>.Current => kv;
-
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                public SoleDictionary(TState key, SwitchInfo value) => kv = new KeyValuePair<TState, SwitchInfo>(key, value);
-
-                SwitchInfo IDictionary<TState, SwitchInfo>.this[TState key] {
-                    get => TryGetValue(key, out var value) ? value : throw new KeyNotFoundException();
-                    set => throw MerklePatriciaTreeSupport.NotSupportedException;
-                }
-
-                public ICollection<TState> Keys => new MerklePatriciaTreeSupport.SoleList<TState>(kv.Key);
-
-                public ICollection<SwitchInfo> Values => new MerklePatriciaTreeSupport.SoleList<SwitchInfo>(kv.Value);
-
-                public bool IsReadOnly => true;
-
-                object? IEnumerator.Current => ((IEnumerator<KeyValuePair<TState, SwitchInfo>>)this).Current;
-
-                public bool Contains(KeyValuePair<TState, SwitchInfo> item) {
-                    if (!TryGetValue(item.Key, out var value)) return false;
-                    return item.Value.Equals(value);
-                }
-
-                public bool ContainsKey(TState key) => EqualityComparer<TState>.Default.Equals(kv.Key, key);
-
-                public void CopyTo(KeyValuePair<TState, SwitchInfo>[] array, int arrayIndex) {
-                    if ((uint)arrayIndex >= (uint)array.Length) throw new ArgumentOutOfRangeException(nameof(arrayIndex));
-                    array[arrayIndex] = kv;
-                }
-
-                public bool TryGetValue(TState key, [MaybeNullWhen(false)] out SwitchInfo value) {
-                    if (ContainsKey(key)) {
-                        value = kv.Value;
-                        return true;
-                    }
-                    value = default!;
-                    return false;
-                }
-
-                IEnumerator IEnumerable.GetEnumerator()
-                    => ((MerklePatriciaTreeSupport.ISoleReadOnlyList<KeyValuePair<TState, SwitchInfo>>)this).GetEnumerator();
-
-                void ICollection<KeyValuePair<TState, SwitchInfo>>.Add(KeyValuePair<TState, SwitchInfo> item)
-                    => throw MerklePatriciaTreeSupport.NotSupportedException;
-
-                void ICollection<KeyValuePair<TState, SwitchInfo>>.Clear()
-                    => throw MerklePatriciaTreeSupport.NotSupportedException;
-
-                bool ICollection<KeyValuePair<TState, SwitchInfo>>.Remove(KeyValuePair<TState, SwitchInfo> item)
-                    => throw MerklePatriciaTreeSupport.NotSupportedException;
-            }
-
-            struct SwitchInfo {
-                public readonly int IncrementCount;
-                public readonly Support.SwitchAction[] SwitchActions;
-
-                public SwitchInfo(int incrementCount, Support.SwitchAction[] switchActions) {
-                    IncrementCount = incrementCount;
-                    SwitchActions = switchActions;
-                }
-            }
-
-            private readonly Dictionary<TState, IDictionary<TState, SwitchInfo>> stateTree = new Dictionary<TState, IDictionary<TState, SwitchInfo>>();
-            private IDictionary<TState, SwitchInfo> currentNextStatus;
-
-            public List<Support.SwitchAction> SwitchActions { get; } = new List<Support.SwitchAction>();
-            public int CurrentCount { get; set; }
-            public TState InitState { get; }
-            public TState CurrentState { get; private set; }
-
-            public StateMachine(TState initState) {
-                InitState = initState;
-                CurrentState = initState;
-                stateTree.Add(initState, currentNextStatus = EmptyDictionary.Default);
-            }
-
-            public void Goto(TState nextState, int newCount) {
-                if (EqualityComparer<TState>.Default.Equals(CurrentState, nextState)) return;
-
-                if (currentNextStatus.TryGetValue(nextState, out var switchInfo)) {
-                    if (SwitchActions.Count != 0) throw new InvalidOperationException("操作中不允许切换到旧状态");
-                    CurrentState = nextState;
-                    currentNextStatus = stateTree[nextState];
-                    CurrentCount += switchInfo.IncrementCount;
-                    Forward(switchInfo.SwitchActions);
-                } else if (stateTree.TryGetValue(nextState, out var nextNextStatus)) {
-                    if (!nextNextStatus.TryGetValue(CurrentState, out switchInfo)) throw new InvalidOperationException("不允许跨状态切换");
-                    if (SwitchActions.Count != 0) throw new InvalidOperationException("操作中不允许切换到旧状态");
-                    CurrentState = nextState;
-                    currentNextStatus = nextNextStatus;
-                    CurrentCount -= switchInfo.IncrementCount;
-                    Back(switchInfo.SwitchActions);
-                } else {
-                    switchInfo = new SwitchInfo(newCount - CurrentCount, SwitchActions.ToArray());
-                    SwitchActions.Clear();
-
-                    if (currentNextStatus is EmptyDictionary) {
-                        currentNextStatus = new SoleDictionary(nextState, switchInfo);
-                        stateTree[CurrentState] = currentNextStatus;
-                    } else if (currentNextStatus is SoleDictionary soleDictionary) {
-                        currentNextStatus = new Dictionary<TState, SwitchInfo> {
-                            [soleDictionary.Key] = soleDictionary.Value,
-                            [nextState] = switchInfo
-                        };
-                        stateTree[CurrentState] = currentNextStatus;
-                    } else {
-                        currentNextStatus.Add(nextState, switchInfo);
-                    }
-
-                    CurrentState = nextState;
-                    currentNextStatus = EmptyDictionary.Default;
-                    CurrentCount = newCount;
-                    stateTree.Add(nextState, currentNextStatus);
-                }
-            }
-
-            public void Rollback() {
-                for (int i = SwitchActions.Count - 1; i >= 0; i--) {
-                    SwitchActions[i].Back();
-                }
-                SwitchActions.Clear();
-            }
-
-            private static void Forward(Support.SwitchAction[] switchActions) {
-                foreach (var @switch in switchActions) @switch.Forward();
-            }
-
-            private static void Back(Support.SwitchAction[] switchActions) {
-                for (int i = switchActions.Length - 1; i >= 0; i--) {
-                    switchActions[i].Back();
-                }
-            }
-        }
     }
 
-    unsafe public partial class MerklePatriciaTree<TKey, TValue, TState> : IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue> where TKey : unmanaged where TState : notnull {
-        private readonly Support.EmptyNode root = new Support.EmptyNode();
-        private readonly StateMachine stateMachine;
+    unsafe public partial class MerklePatriciaTree<TKey, TValue, THash> : IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue> where TKey : unmanaged where TValue : notnull where THash : unmanaged {
+        private Support.EmptyNode root;
+        private readonly IHashAlgorithm<TValue, THash> hashAlgorithm;
 
-        public MerklePatriciaTree(TState initState) {
-            stateMachine = new StateMachine(initState);
+        public MerklePatriciaTree(int generation, IHashAlgorithm<TValue, THash> hashAlgorithm) {
+            Generation = generation;
+            this.hashAlgorithm = hashAlgorithm ?? throw new ArgumentNullException(nameof(hashAlgorithm));
+            root = new Support.EmptyNode(generation, hashAlgorithm.ComputeHash(ReadOnlySpan<THash>.Empty));
+            Count = 0;
         }
 
-        public void Goto(TState nextState) {
-            stateMachine.Goto(nextState, Count);
-            Count = stateMachine.CurrentCount;
+        public MerklePatriciaTree(MerklePatriciaTree<TKey, TValue, THash> parentTree, int generation) {
+            if (generation <= parentTree.Generation) throw new ArgumentOutOfRangeException(nameof(generation), "MPT代数太低");
+
+            Generation = generation;
+            root = parentTree.root;
+            hashAlgorithm = parentTree.hashAlgorithm;
+            Count = parentTree.Count;
         }
 
-        public void Rollback() {
-            stateMachine.Rollback();
-            Count = stateMachine.CurrentCount;
-        }
+        public MerklePatriciaTree<TKey, TValue, THash> NewNext() => new MerklePatriciaTree<TKey, TValue, THash>(this, Generation + 1);
+
+        public int Generation { get; }
 
         public TValue this[TKey key] {
             get {
@@ -859,7 +738,7 @@ namespace OnlyChain.Core {
 
         public ICollection<TValue> Values => new ValueEnumerator(this);
 
-        public int Count { get; private set; } = 0;
+        public int Count { get; private set; }
 
         public bool IsReadOnly => false;
 
@@ -872,12 +751,13 @@ namespace OnlyChain.Core {
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.AddArgs {
+                HashAlgorithm = hashAlgorithm,
+                Generation = Generation,
                 Value = value,
                 Update = update,
             };
-            root.Add(ref args, keyBuffer, sizeof(TKey) * 2);
+            root = (Support.EmptyNode)root.Add(ref args, keyBuffer, sizeof(TKey) * 2);
             if (args.Result & !args.Update) {
-                stateMachine.SwitchActions.Add(args.Switch);
                 Count++;
             }
             return args.Result;
@@ -896,8 +776,14 @@ namespace OnlyChain.Core {
         public bool TryAdd(TKey key, TValue value) => AddOrUpdate(key, value, false);
 
         public void Clear() {
-            root.Clear();
-            Count = 0;
+            if (Count != 0) {
+                var args = new Support.RemoveArgs {
+                    HashAlgorithm = hashAlgorithm,
+                    Generation = Generation,
+                };
+                root = root.Clear(ref args);
+                Count = 0;
+            }
         }
 
         public bool Contains(KeyValuePair<TKey, TValue> item) {
@@ -937,10 +823,11 @@ namespace OnlyChain.Core {
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.RemoveArgs {
+                HashAlgorithm = hashAlgorithm,
+                Generation = Generation,
             };
-            root.Remove(ref args, keyBuffer);
+            root = (Support.EmptyNode)root.Remove(ref args, keyBuffer)!;
             if (args.Result) {
-                stateMachine.SwitchActions.Add(args.Switch);
                 Count--;
                 return true;
             }
@@ -955,12 +842,13 @@ namespace OnlyChain.Core {
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.RemoveArgs {
+                HashAlgorithm = hashAlgorithm,
+                Generation = Generation,
                 Value = item.Value,
                 NeedCompareValue = true,
             };
-            root.Remove(ref args, keyBuffer);
+            root = (Support.EmptyNode)root.Remove(ref args, keyBuffer)!;
             if (args.Result) {
-                stateMachine.SwitchActions.Add(args.Switch);
                 Count--;
                 return true;
             }
@@ -977,11 +865,12 @@ namespace OnlyChain.Core {
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.RemoveArgs {
+                HashAlgorithm = hashAlgorithm,
+                Generation = Generation,
                 NeedSetValue = true,
             };
-            root.Remove(ref args, keyBuffer);
+            root = (Support.EmptyNode)root.Remove(ref args, keyBuffer)!;
             if (args.Result) {
-                stateMachine.SwitchActions.Add(args.Switch);
                 Count--;
                 value = args.Value;
                 return true;
@@ -1027,7 +916,7 @@ namespace OnlyChain.Core {
             }
 
             public void CopyTo(TKey[] array, int arrayIndex) {
-                if (arrayIndex + Count < array.Length) throw new ArgumentOutOfRangeException();
+                if (arrayIndex < 0 || arrayIndex + Count > array.Length) throw new ArgumentOutOfRangeException();
                 int i = 0;
                 foreach (var key in this) {
                     array[arrayIndex + i++] = key;
@@ -1065,7 +954,7 @@ namespace OnlyChain.Core {
             public bool Contains(TValue item) => source.Select(kv => kv.Value).Contains(item);
 
             public void CopyTo(TValue[] array, int arrayIndex) {
-                if (arrayIndex + Count < array.Length) throw new ArgumentOutOfRangeException();
+                if (arrayIndex < 0 || arrayIndex + Count > array.Length) throw new ArgumentOutOfRangeException();
                 int i = 0;
                 foreach (var key in this) {
                     array[arrayIndex + i++] = key;

@@ -7,7 +7,7 @@ using System.Text;
 namespace OnlyChain.Secp256k1.Math {
     [SuppressUnmanagedCodeSecurity]
     unsafe internal static class U256Math {
-        const string Dll = "u256math.dll";
+        const string Dll = "u256math";
 
 #pragma warning disable IDE1006 // 命名样式
 #pragma warning disable CA1401 // P/Invokes should not be visible

@@ -13,10 +13,31 @@ using System.Net.Sockets;
 using System.Threading;
 using OnlyChain.Network;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 
 namespace OnlyChain {
     class Program {
         static string[] messages;
+
+        sealed class StringHashAlgorithm : IHashAlgorithm<string, Hash<Size256>> {
+            public static readonly IHashAlgorithm<string, Hash<Size256>> Default = new StringHashAlgorithm();
+
+            private readonly SHA256 sha256 = SHA256.Create();
+
+            private StringHashAlgorithm() { }
+
+            public Hash<Size256> ComputeHash(string value) {
+                Hash<Size256> result = default;
+                sha256.TryComputeHash(Encoding.UTF8.GetBytes(value), result.Span, out _);
+                return result;
+            }
+
+            public Hash<Size256> ComputeHash(ReadOnlySpan<Hash<Size256>> hashes) {
+                Hash<Size256> result = default;
+                sha256.TryComputeHash(MemoryMarshal.Cast<Hash<Size256>, byte>(hashes), result.Span, out _);
+                return result;
+            }
+        }
 
         unsafe static void Test() {
             Size256 a = default, b = default;
@@ -42,39 +63,120 @@ namespace OnlyChain {
 
         static void Main(string[] args) {
             var sw = new System.Diagnostics.Stopwatch();
-            while (true) {
-                var keys = new Address[1000000];
-                for (int i = 0; i < keys.Length; i++) keys[i] = Address.Random();
-                //var memSize = GC.GetTotalMemory(true);
+            var keys = new Address[1000000];
+            for (int i = 0; i < keys.Length; i++) keys[i] = Address.Random();
 
-                var tree = new MerklePatriciaTree<Address, string>();
-                sw.Restart();
-                for (int i = 0; i < keys.Length; i++) {
-                    tree.Add(keys[i], keys[i].ToString());
-                }
-                sw.Stop();
-                Console.WriteLine(sw.Elapsed);
-                //Console.WriteLine((GC.GetTotalMemory(true) - memSize) / 1024.0 / 1024.0);
+            //foreach (var k in keys) Console.WriteLine(k);
+            Console.WriteLine("=====================");
 
+            //var memSize = GC.GetTotalMemory(true);
 
-                sw.Restart();
-                for (int i = 0; i < keys.Length; i++) {
-                    if (!tree.TryGetValue(keys[i], out _)) throw new Exception();
-                }
-                sw.Stop();
-                Console.WriteLine(sw.Elapsed);
+            // 019251639cb90c9d59f2108524d377315d781caf
+            // 8750f447c8355658a4724a129592b5f2c21b87dc
+            // 0f77cce7599bf8bb0b49f00c378410d861bad2af
+            //keys[0] = "019251639cb90c9d59f2108524d377315d781caf";
+            //keys[1] = "8750f447c8355658a4724a129592b5f2c21b87dc";
+            //keys[2] = "0f77cce7599bf8bb0b49f00c378410d861bad2af";
 
-                sw.Restart();
-                foreach (var kv in tree) ;
-                sw.Stop();
-                Console.WriteLine(sw.Elapsed);
-
-                GC.Collect();
-
-                Console.WriteLine("====================================");
+            var tree = new MerklePatriciaTree<Address, string, Hash<Size256>>(0, StringHashAlgorithm.Default);
+            sw.Restart();
+            for (int i = 0; i < keys.Length; i++) {
+                tree.Add(keys[i], keys[i].ToString());
             }
-            Thread.Sleep(-1);
+            sw.Stop();
+            Console.WriteLine(sw.Elapsed);
+
+            int count = 0;
+            foreach (var kv in tree) {
+                count++;
+            }
+            Console.WriteLine(count);
+
+            count = 0;
+            foreach (var kv in tree) {
+                count++;
+            }
+            Console.WriteLine(count);
+
+            //Console.WriteLine((GC.GetTotalMemory(true) - memSize) / 1024.0 / 1024.0);
+
+            //sw.Restart();
+            //for (int i = 0; i < keys.Length; i++) {
+            //    tree.TryAdd(keys[i], keys[i].ToString());
+            //}
+            //sw.Stop();
+            //Console.WriteLine(sw.Elapsed);
             //Console.WriteLine(tree.Count);
+
+
+            sw.Restart();
+            for (int i = 0; i < keys.Length; i++) {
+                if (!tree.TryGetValue(keys[i], out _)) throw new Exception();
+            }
+            sw.Stop();
+            //Console.WriteLine(sw.Elapsed);
+
+            //sw.Restart();
+            //foreach (var kv in tree) Console.WriteLine(kv);
+            ////foreach (var kv in tree) ;
+            //sw.Stop();
+            //Console.WriteLine(sw.Elapsed);
+
+            // 1afbacf8ac3e1356c2a5887ded44934daf7fc014ae75deb7ae4fcc4b5410a92f
+
+            //sw.Restart();
+            //for (int i = 0; i < keys.Length; i++) {
+            //    if (!tree.Remove(keys[i])) throw new Exception();
+            //}
+            //sw.Stop();
+            //Console.WriteLine(sw.Elapsed);
+
+            count = 0;
+            foreach (var kv in tree) {
+                count++;
+                //Console.WriteLine(kv);
+            }
+            Console.WriteLine(count);
+
+            var mpt2 = tree.NewNext();
+            for (int i = 0; i < keys.Length; i++) keys[i] = Address.Random();
+
+            for (int i = 0; i < keys.Length; i++) {
+                mpt2.Add(keys[i], keys[i].ToString());
+            }
+
+            var mpt3 = mpt2.NewNext();
+            for (int i = 0; i < keys.Length; i++) keys[i] = Address.Random();
+
+            for (int i = 0; i < keys.Length; i++) {
+                mpt3.Add(keys[i], keys[i].ToString());
+            }
+
+            count = 0;
+            foreach (var kv in tree) {
+                count++;
+                //Console.WriteLine(kv);
+            }
+            Console.WriteLine(count);
+
+            count = 0;
+            foreach (var kv in mpt2) {
+                count++;
+                //Console.WriteLine(kv);
+            }
+            Console.WriteLine(count);
+
+            count = 0;
+            foreach (var kv in mpt3) {
+                count++;
+                //Console.WriteLine(kv);
+            }
+            Console.WriteLine(count);
+
+            Thread.Sleep(-1);
+            Console.WriteLine(tree.Count);
+            Console.WriteLine(mpt2.Count);
+            Console.WriteLine(mpt3.Count);
             return;
 
 
