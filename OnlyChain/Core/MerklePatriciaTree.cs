@@ -228,6 +228,7 @@ namespace OnlyChain.Core {
 
             public abstract class Node {
                 public readonly int Generation;
+
                 public THash Hash;
 
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -246,6 +247,7 @@ namespace OnlyChain.Core {
                 public abstract bool TryGetValue(byte* key, [MaybeNullWhen(false)] out TValue value);
                 public virtual Node PrefixConcat<TBlock>(LongPathNode<TBlock> parent) where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock => parent;
             }
+
 
             public sealed class EmptyNode : Node {
                 private Node? child;

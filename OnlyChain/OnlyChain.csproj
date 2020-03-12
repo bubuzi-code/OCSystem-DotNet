@@ -18,4 +18,10 @@
     <ProjectReference Include="..\OnlyChain.Secp256k1\OnlyChain.Secp256k1.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="leveldb.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
