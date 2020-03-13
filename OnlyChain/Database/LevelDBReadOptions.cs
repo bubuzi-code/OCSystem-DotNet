@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace OnlyChain.Database {
-    unsafe public sealed class LevelDBReadOptions : LevelDBObject<Native.leveldb_readoptions_t> {
+    unsafe internal sealed class LevelDBReadOptions : LevelDBObject<Native.leveldb_readoptions_t> {
         public readonly static LevelDBReadOptions Default = new LevelDBReadOptions();
 
 #pragma warning disable IDE0052 // 删除未读的私有成员
