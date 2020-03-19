@@ -3,224 +3,156 @@ using System;
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-
+using System.Runtime.InteropServices;
 using static System.Runtime.CompilerServices.MethodImplOptions;
 
 namespace OnlyChain.Core {
     public static class Ripemd160 {
-        [MethodImpl(AggressiveInlining)] static uint f1(uint x, uint y, uint z) => x ^ y ^ z;
-        [MethodImpl(AggressiveInlining)] static uint f2(uint x, uint y, uint z) => (x & y) | (~x & z);
-        [MethodImpl(AggressiveInlining)] static uint f3(uint x, uint y, uint z) => (x | ~y) ^ z;
-        [MethodImpl(AggressiveInlining)] static uint f4(uint x, uint y, uint z) => (x & z) | (y & ~z);
-        [MethodImpl(AggressiveInlining)] static uint f5(uint x, uint y, uint z) => x ^ (y | ~z);
+        const uint
+            LK1 = 0,
+            LK2 = 0x5A827999u,
+            LK3 = 0x6ED9EBA1u,
+            LK4 = 0x8F1BBCDCu,
+            LK5 = 0xA953FD4Eu;
+        const uint
+            RK1 = 0x50A28BE6u,
+            RK2 = 0x5C4DD124u,
+            RK3 = 0x6D703EF3u,
+            RK4 = 0x7A6D76E9u,
+            RK5 = 0;
 
-        [MethodImpl(AggressiveInlining)]
-        static void round(ref uint a, uint b, ref uint c, uint d, uint e, uint f, uint x, uint k, int r) {
-            a = BitOperations.RotateLeft(a + f + x + k, r) + e;
-            c = BitOperations.RotateLeft(c, 10);
-        }
+        static readonly int[] Table = {
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,   // l offset 1
+            11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8, // l shift  1
+            5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12,   // r offset 1
+            8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6, // r shift  1
 
-        [MethodImpl(AggressiveInlining)] static void L1(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f1(b, c, d), x, 0, r);
-        [MethodImpl(AggressiveInlining)] static void L2(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f2(b, c, d), x, 0x5A827999u, r);
-        [MethodImpl(AggressiveInlining)] static void L3(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f3(b, c, d), x, 0x6ED9EBA1u, r);
-        [MethodImpl(AggressiveInlining)] static void L4(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f4(b, c, d), x, 0x8F1BBCDCu, r);
-        [MethodImpl(AggressiveInlining)] static void L5(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f5(b, c, d), x, 0xA953FD4Eu, r);
+            7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8,   // l offset 2
+            7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12, // l shift  2
+            6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2,   // r offset 2
+            9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11, // r shift  2
 
-        [MethodImpl(AggressiveInlining)] static void R1(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f5(b, c, d), x, 0x50A28BE6u, r);
-        [MethodImpl(AggressiveInlining)] static void R2(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f4(b, c, d), x, 0x5C4DD124u, r);
-        [MethodImpl(AggressiveInlining)] static void R3(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f3(b, c, d), x, 0x6D703EF3u, r);
-        [MethodImpl(AggressiveInlining)] static void R4(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f2(b, c, d), x, 0x7A6D76E9u, r);
-        [MethodImpl(AggressiveInlining)] static void R5(ref uint a, uint b, ref uint c, uint d, uint e, uint x, int r) => round(ref a, b, ref c, d, e, f1(b, c, d), x, 0, r);
+            3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12,   // l offset 3
+            11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5, // l shift  3
+            15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13,   // r offset 3
+            9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5, // r shift  3
 
-        public static Hash<Size160> ComputeHash(Hash<Size256> hash) {
+            1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2,   // l offset 4
+            11, 12, 14, 15, 14, 15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12, // l shift  4
+            8, 6, 4, 1, 3, 11, 15, 0, 5, 12, 2, 13, 9, 7, 10, 14,   // r offset 4
+            15, 5, 8, 11, 14, 14, 6, 14, 6, 9, 12, 9, 12, 5, 15, 8, // r shift  4
+
+            4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13,   // l offset 5
+            9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6, // l shift  5
+            12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11,   // r offset 5
+            8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11, // r shift  5
+        };
+
+        unsafe public static Hash<Size160> ComputeHash(Hash<Size256> hash) {
+            static uint F1(uint x, uint y, uint z) => x ^ y ^ z;
+            static uint F2(uint x, uint y, uint z) => (x & y) | (~x & z);
+            static uint F3(uint x, uint y, uint z) => (x | ~y) ^ z;
+            static uint F4(uint x, uint y, uint z) => (x & z) | (y & ~z);
+            static uint F5(uint x, uint y, uint z) => x ^ (y | ~z);
+
+            uint* m = stackalloc uint[sizeof(uint) * 16];
+            *(Hash<Size256>*)m = hash;
+            m[8] = 0x80;
+            m[14] = 256;
+
             uint a1 = 0x67452301u, b1 = 0xEFCDAB89u, c1 = 0x98BADCFEu, d1 = 0x10325476u, e1 = 0xC3D2E1F0u;
-            uint a2 = a1, b2 = b1, c2 = c1, d2 = d1, e2 = e1;
+            uint a2 = 0x67452301u, b2 = 0xEFCDAB89u, c2 = 0x98BADCFEu, d2 = 0x10325476u, e2 = 0xC3D2E1F0u;
 
-            uint m0 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 0);
-            uint m1 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 1);
-            uint m2 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 2);
-            uint m3 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 3);
-            uint m4 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 4);
-            uint m5 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 5);
-            uint m6 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 6);
-            uint m7 = Unsafe.Add(ref Unsafe.As<Hash<Size256>, uint>(ref hash), 7);
-            const uint m8 = 0x80, m9 = 0, m10 = 0, m11 = 0, m12 = 0, m13 = 0, m14 = 256, m15 = 0;
+            ref int table = ref MemoryMarshal.GetReference((ReadOnlySpan<int>)Table);
 
-            if (!BitConverter.IsLittleEndian) {
-                m0 = BinaryPrimitives.ReverseEndianness(m0);
-                m1 = BinaryPrimitives.ReverseEndianness(m1);
-                m2 = BinaryPrimitives.ReverseEndianness(m2);
-                m3 = BinaryPrimitives.ReverseEndianness(m3);
-                m4 = BinaryPrimitives.ReverseEndianness(m4);
-                m5 = BinaryPrimitives.ReverseEndianness(m5);
-                m6 = BinaryPrimitives.ReverseEndianness(m6);
-                m7 = BinaryPrimitives.ReverseEndianness(m7);
+            for (int i = 0; i < 16; i++) {
+                var t = BitOperations.RotateLeft(a1 + F1(b1, c1, d1) + m[Unsafe.Add(ref table, i)] + LK1, Unsafe.Add(ref table, i + 16)) + e1;
+                a1 = e1;
+                e1 = d1;
+                d1 = BitOperations.RotateLeft(c1, 10);
+                c1 = b1;
+                b1 = t;
+
+                System.Diagnostics.Debugger.Break();
+                t = BitOperations.RotateLeft(a2 + F5(b2, c2, d2) + m[Unsafe.Add(ref table, i + 32)] + RK1, Unsafe.Add(ref table, i + 48)) + e2;
+                a2 = e2;
+                e2 = d2;
+                d2 = BitOperations.RotateLeft(c2, 10);
+                c2 = b2;
+                b2 = t;
             }
 
-            L1(ref a1, b1, ref c1, d1, e1, m0, 11);
-            R1(ref a2, b2, ref c2, d2, e2, m5, 8);
-            L1(ref e1, a1, ref b1, c1, d1, m1, 14);
-            R1(ref e2, a2, ref b2, c2, d2, m14, 9);
-            L1(ref d1, e1, ref a1, b1, c1, m2, 15);
-            R1(ref d2, e2, ref a2, b2, c2, m7, 9);
-            L1(ref c1, d1, ref e1, a1, b1, m3, 12);
-            R1(ref c2, d2, ref e2, a2, b2, m0, 11);
-            L1(ref b1, c1, ref d1, e1, a1, m4, 5);
-            R1(ref b2, c2, ref d2, e2, a2, m9, 13);
-            L1(ref a1, b1, ref c1, d1, e1, m5, 8);
-            R1(ref a2, b2, ref c2, d2, e2, m2, 15);
-            L1(ref e1, a1, ref b1, c1, d1, m6, 7);
-            R1(ref e2, a2, ref b2, c2, d2, m11, 15);
-            L1(ref d1, e1, ref a1, b1, c1, m7, 9);
-            R1(ref d2, e2, ref a2, b2, c2, m4, 5);
-            L1(ref c1, d1, ref e1, a1, b1, m8, 11);
-            R1(ref c2, d2, ref e2, a2, b2, m13, 7);
-            L1(ref b1, c1, ref d1, e1, a1, m9, 13);
-            R1(ref b2, c2, ref d2, e2, a2, m6, 7);
-            L1(ref a1, b1, ref c1, d1, e1, m10, 14);
-            R1(ref a2, b2, ref c2, d2, e2, m15, 8);
-            L1(ref e1, a1, ref b1, c1, d1, m11, 15);
-            R1(ref e2, a2, ref b2, c2, d2, m8, 11);
-            L1(ref d1, e1, ref a1, b1, c1, m12, 6);
-            R1(ref d2, e2, ref a2, b2, c2, m1, 14);
-            L1(ref c1, d1, ref e1, a1, b1, m13, 7);
-            R1(ref c2, d2, ref e2, a2, b2, m10, 14);
-            L1(ref b1, c1, ref d1, e1, a1, m14, 9);
-            R1(ref b2, c2, ref d2, e2, a2, m3, 12);
-            L1(ref a1, b1, ref c1, d1, e1, m15, 8);
-            R1(ref a2, b2, ref c2, d2, e2, m12, 6);
+            table = ref Unsafe.Add(ref table, 64);
 
-            L2(ref e1, a1, ref b1, c1, d1, m7, 7);
-            R2(ref e2, a2, ref b2, c2, d2, m6, 9);
-            L2(ref d1, e1, ref a1, b1, c1, m4, 6);
-            R2(ref d2, e2, ref a2, b2, c2, m11, 13);
-            L2(ref c1, d1, ref e1, a1, b1, m13, 8);
-            R2(ref c2, d2, ref e2, a2, b2, m3, 15);
-            L2(ref b1, c1, ref d1, e1, a1, m1, 13);
-            R2(ref b2, c2, ref d2, e2, a2, m7, 7);
-            L2(ref a1, b1, ref c1, d1, e1, m10, 11);
-            R2(ref a2, b2, ref c2, d2, e2, m0, 12);
-            L2(ref e1, a1, ref b1, c1, d1, m6, 9);
-            R2(ref e2, a2, ref b2, c2, d2, m13, 8);
-            L2(ref d1, e1, ref a1, b1, c1, m15, 7);
-            R2(ref d2, e2, ref a2, b2, c2, m5, 9);
-            L2(ref c1, d1, ref e1, a1, b1, m3, 15);
-            R2(ref c2, d2, ref e2, a2, b2, m10, 11);
-            L2(ref b1, c1, ref d1, e1, a1, m12, 7);
-            R2(ref b2, c2, ref d2, e2, a2, m14, 7);
-            L2(ref a1, b1, ref c1, d1, e1, m0, 12);
-            R2(ref a2, b2, ref c2, d2, e2, m15, 7);
-            L2(ref e1, a1, ref b1, c1, d1, m9, 15);
-            R2(ref e2, a2, ref b2, c2, d2, m8, 12);
-            L2(ref d1, e1, ref a1, b1, c1, m5, 9);
-            R2(ref d2, e2, ref a2, b2, c2, m12, 7);
-            L2(ref c1, d1, ref e1, a1, b1, m2, 11);
-            R2(ref c2, d2, ref e2, a2, b2, m4, 6);
-            L2(ref b1, c1, ref d1, e1, a1, m14, 7);
-            R2(ref b2, c2, ref d2, e2, a2, m9, 15);
-            L2(ref a1, b1, ref c1, d1, e1, m11, 13);
-            R2(ref a2, b2, ref c2, d2, e2, m1, 13);
-            L2(ref e1, a1, ref b1, c1, d1, m8, 12);
-            R2(ref e2, a2, ref b2, c2, d2, m2, 11);
+            for (int i = 0; i < 16; i++) {
+                var t = BitOperations.RotateLeft(a1 + F2(b1, c1, d1) + m[Unsafe.Add(ref table, i)] + LK2, Unsafe.Add(ref table, i + 16)) + e1;
+                a1 = e1;
+                e1 = d1;
+                d1 = BitOperations.RotateLeft(c1, 10);
+                c1 = b1;
+                b1 = t;
 
-            L3(ref d1, e1, ref a1, b1, c1, m3, 11);
-            R3(ref d2, e2, ref a2, b2, c2, m15, 9);
-            L3(ref c1, d1, ref e1, a1, b1, m10, 13);
-            R3(ref c2, d2, ref e2, a2, b2, m5, 7);
-            L3(ref b1, c1, ref d1, e1, a1, m14, 6);
-            R3(ref b2, c2, ref d2, e2, a2, m1, 15);
-            L3(ref a1, b1, ref c1, d1, e1, m4, 7);
-            R3(ref a2, b2, ref c2, d2, e2, m3, 11);
-            L3(ref e1, a1, ref b1, c1, d1, m9, 14);
-            R3(ref e2, a2, ref b2, c2, d2, m7, 8);
-            L3(ref d1, e1, ref a1, b1, c1, m15, 9);
-            R3(ref d2, e2, ref a2, b2, c2, m14, 6);
-            L3(ref c1, d1, ref e1, a1, b1, m8, 13);
-            R3(ref c2, d2, ref e2, a2, b2, m6, 6);
-            L3(ref b1, c1, ref d1, e1, a1, m1, 15);
-            R3(ref b2, c2, ref d2, e2, a2, m9, 14);
-            L3(ref a1, b1, ref c1, d1, e1, m2, 14);
-            R3(ref a2, b2, ref c2, d2, e2, m11, 12);
-            L3(ref e1, a1, ref b1, c1, d1, m7, 8);
-            R3(ref e2, a2, ref b2, c2, d2, m8, 13);
-            L3(ref d1, e1, ref a1, b1, c1, m0, 13);
-            R3(ref d2, e2, ref a2, b2, c2, m12, 5);
-            L3(ref c1, d1, ref e1, a1, b1, m6, 6);
-            R3(ref c2, d2, ref e2, a2, b2, m2, 14);
-            L3(ref b1, c1, ref d1, e1, a1, m13, 5);
-            R3(ref b2, c2, ref d2, e2, a2, m10, 13);
-            L3(ref a1, b1, ref c1, d1, e1, m11, 12);
-            R3(ref a2, b2, ref c2, d2, e2, m0, 13);
-            L3(ref e1, a1, ref b1, c1, d1, m5, 7);
-            R3(ref e2, a2, ref b2, c2, d2, m4, 7);
-            L3(ref d1, e1, ref a1, b1, c1, m12, 5);
-            R3(ref d2, e2, ref a2, b2, c2, m13, 5);
+                t = BitOperations.RotateLeft(a2 + F4(b2, c2, d2) + m[Unsafe.Add(ref table, i + 32)] + RK2, Unsafe.Add(ref table, i + 48)) + e2;
+                a2 = e2;
+                e2 = d2;
+                d2 = BitOperations.RotateLeft(c2, 10);
+                c2 = b2;
+                b2 = t;
+            }
 
-            L4(ref c1, d1, ref e1, a1, b1, m1, 11);
-            R4(ref c2, d2, ref e2, a2, b2, m8, 15);
-            L4(ref b1, c1, ref d1, e1, a1, m9, 12);
-            R4(ref b2, c2, ref d2, e2, a2, m6, 5);
-            L4(ref a1, b1, ref c1, d1, e1, m11, 14);
-            R4(ref a2, b2, ref c2, d2, e2, m4, 8);
-            L4(ref e1, a1, ref b1, c1, d1, m10, 15);
-            R4(ref e2, a2, ref b2, c2, d2, m1, 11);
-            L4(ref d1, e1, ref a1, b1, c1, m0, 14);
-            R4(ref d2, e2, ref a2, b2, c2, m3, 14);
-            L4(ref c1, d1, ref e1, a1, b1, m8, 15);
-            R4(ref c2, d2, ref e2, a2, b2, m11, 14);
-            L4(ref b1, c1, ref d1, e1, a1, m12, 9);
-            R4(ref b2, c2, ref d2, e2, a2, m15, 6);
-            L4(ref a1, b1, ref c1, d1, e1, m4, 8);
-            R4(ref a2, b2, ref c2, d2, e2, m0, 14);
-            L4(ref e1, a1, ref b1, c1, d1, m13, 9);
-            R4(ref e2, a2, ref b2, c2, d2, m5, 6);
-            L4(ref d1, e1, ref a1, b1, c1, m3, 14);
-            R4(ref d2, e2, ref a2, b2, c2, m12, 9);
-            L4(ref c1, d1, ref e1, a1, b1, m7, 5);
-            R4(ref c2, d2, ref e2, a2, b2, m2, 12);
-            L4(ref b1, c1, ref d1, e1, a1, m15, 6);
-            R4(ref b2, c2, ref d2, e2, a2, m13, 9);
-            L4(ref a1, b1, ref c1, d1, e1, m14, 8);
-            R4(ref a2, b2, ref c2, d2, e2, m9, 12);
-            L4(ref e1, a1, ref b1, c1, d1, m5, 6);
-            R4(ref e2, a2, ref b2, c2, d2, m7, 5);
-            L4(ref d1, e1, ref a1, b1, c1, m6, 5);
-            R4(ref d2, e2, ref a2, b2, c2, m10, 15);
-            L4(ref c1, d1, ref e1, a1, b1, m2, 12);
-            R4(ref c2, d2, ref e2, a2, b2, m14, 8);
+            table = ref Unsafe.Add(ref table, 64);
 
-            L5(ref b1, c1, ref d1, e1, a1, m4, 9);
-            R5(ref b2, c2, ref d2, e2, a2, m12, 8);
-            L5(ref a1, b1, ref c1, d1, e1, m0, 15);
-            R5(ref a2, b2, ref c2, d2, e2, m15, 5);
-            L5(ref e1, a1, ref b1, c1, d1, m5, 5);
-            R5(ref e2, a2, ref b2, c2, d2, m10, 12);
-            L5(ref d1, e1, ref a1, b1, c1, m9, 11);
-            R5(ref d2, e2, ref a2, b2, c2, m4, 9);
-            L5(ref c1, d1, ref e1, a1, b1, m7, 6);
-            R5(ref c2, d2, ref e2, a2, b2, m1, 12);
-            L5(ref b1, c1, ref d1, e1, a1, m12, 8);
-            R5(ref b2, c2, ref d2, e2, a2, m5, 5);
-            L5(ref a1, b1, ref c1, d1, e1, m2, 13);
-            R5(ref a2, b2, ref c2, d2, e2, m8, 14);
-            L5(ref e1, a1, ref b1, c1, d1, m10, 12);
-            R5(ref e2, a2, ref b2, c2, d2, m7, 6);
-            L5(ref d1, e1, ref a1, b1, c1, m14, 5);
-            R5(ref d2, e2, ref a2, b2, c2, m6, 8);
-            L5(ref c1, d1, ref e1, a1, b1, m1, 12);
-            R5(ref c2, d2, ref e2, a2, b2, m2, 13);
-            L5(ref b1, c1, ref d1, e1, a1, m3, 13);
-            R5(ref b2, c2, ref d2, e2, a2, m13, 6);
-            L5(ref a1, b1, ref c1, d1, e1, m8, 14);
-            R5(ref a2, b2, ref c2, d2, e2, m14, 5);
-            L5(ref e1, a1, ref b1, c1, d1, m11, 11);
-            R5(ref e2, a2, ref b2, c2, d2, m0, 15);
-            L5(ref d1, e1, ref a1, b1, c1, m6, 8);
-            R5(ref d2, e2, ref a2, b2, c2, m3, 13);
-            L5(ref c1, d1, ref e1, a1, b1, m15, 5);
-            R5(ref c2, d2, ref e2, a2, b2, m9, 11);
-            L5(ref b1, c1, ref d1, e1, a1, m13, 6);
-            R5(ref b2, c2, ref d2, e2, a2, m11, 11);
+            for (int i = 0; i < 16; i++) {
+                var t = BitOperations.RotateLeft(a1 + F3(b1, c1, d1) + m[Unsafe.Add(ref table, i)] + LK3, Unsafe.Add(ref table, i + 16)) + e1;
+                a1 = e1;
+                e1 = d1;
+                d1 = BitOperations.RotateLeft(c1, 10);
+                c1 = b1;
+                b1 = t;
+
+                t = BitOperations.RotateLeft(a2 + F3(b2, c2, d2) + m[Unsafe.Add(ref table, i + 32)] + RK3, Unsafe.Add(ref table, i + 48)) + e2;
+                a2 = e2;
+                e2 = d2;
+                d2 = BitOperations.RotateLeft(c2, 10);
+                c2 = b2;
+                b2 = t;
+            }
+
+            table = ref Unsafe.Add(ref table, 64);
+
+            for (int i = 0; i < 16; i++) {
+                var t = BitOperations.RotateLeft(a1 + F4(b1, c1, d1) + m[Unsafe.Add(ref table, i)] + LK4, Unsafe.Add(ref table, i + 16)) + e1;
+                a1 = e1;
+                e1 = d1;
+                d1 = BitOperations.RotateLeft(c1, 10);
+                c1 = b1;
+                b1 = t;
+
+                t = BitOperations.RotateLeft(a2 + F2(b2, c2, d2) + m[Unsafe.Add(ref table, i + 32)] + RK4, Unsafe.Add(ref table, i + 48)) + e2;
+                a2 = e2;
+                e2 = d2;
+                d2 = BitOperations.RotateLeft(c2, 10);
+                c2 = b2;
+                b2 = t;
+            }
+
+            table = ref Unsafe.Add(ref table, 64);
+
+            for (int i = 0; i < 16; i++) {
+                var t = BitOperations.RotateLeft(a1 + F5(b1, c1, d1) + m[Unsafe.Add(ref table, i)] + LK5, Unsafe.Add(ref table, i + 16)) + e1;
+                a1 = e1;
+                e1 = d1;
+                d1 = BitOperations.RotateLeft(c1, 10);
+                c1 = b1;
+                b1 = t;
+
+                t = BitOperations.RotateLeft(a2 + F1(b2, c2, d2) + m[Unsafe.Add(ref table, i + 32)] + RK5, Unsafe.Add(ref table, i + 48)) + e2;
+                a2 = e2;
+                e2 = d2;
+                d2 = BitOperations.RotateLeft(c2, 10);
+                c2 = b2;
+                b2 = t;
+            }
 
             Hash<Size160> result = default;
             Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 0) = 0xEFCDAB89u + c1 + d2;
@@ -228,13 +160,6 @@ namespace OnlyChain.Core {
             Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 2) = 0x10325476u + e1 + a2;
             Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 3) = 0xC3D2E1F0u + a1 + b2;
             Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 4) = 0x67452301u + b1 + c2;
-            if (!BitConverter.IsLittleEndian) {
-                Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 0) = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 0));
-                Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 1) = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 1));
-                Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 2) = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 2));
-                Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 3) = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 3));
-                Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 4) = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Hash<Size160>, uint>(ref result), 4));
-            }
             return result;
         }
     }

@@ -234,7 +234,7 @@ namespace OnlyChain.Network {
             var nodes = new Dictionary<Address, Node>();
             for (int i = 0; i < buffer.Length;) {
                 i += ReadNode(buffer.AsSpan(i), out var node);
-                if (!nodes.ContainsKey(Address)) nodes.Add(node.Address, node);
+                if (!nodes.ContainsKey(node.Address)) nodes.Add(node.Address, node);
             }
             if (hasRemoteNode) {
                 nodes.Add(r.Address, new Node(r.Address, r.Remote));

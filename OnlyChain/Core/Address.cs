@@ -21,9 +21,9 @@ namespace OnlyChain.Core {
         /// <summary>
         /// 栈上的<see cref="Address"/>对象使用此属性才是安全的。
         /// </summary>
-        public readonly ReadOnlySpan<byte> Span {
+        public readonly ReadOnlySpan<byte> ReadOnlySpan {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => hash.Span;
+            get => hash.ReadOnlySpan;
         }
 
         public static ref Address FromSpan(Span<byte> span) {
@@ -40,11 +40,10 @@ namespace OnlyChain.Core {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly bool Equals(Address other) {
-            fixed (Address* @this = &this) {
-                if (((ulong*)@this)[0] != ((ulong*)&other)[0]) return false;
-                if (((ulong*)@this)[1] != ((ulong*)&other)[1]) return false;
-                return ((uint*)@this)[4] == ((uint*)&other)[4];
-            }
+            ref Address @this = ref Unsafe.AsRef(this);
+            if (Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 0) != ((ulong*)&other)[0]) return false;
+            if (Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 1) != ((ulong*)&other)[1]) return false;
+            return Unsafe.Add(ref Unsafe.As<Address, uint>(ref @this), 4) == ((uint*)&other)[4];
         }
 
         public static bool operator ==(Address left, Address right) => left.Equals(right);
@@ -55,28 +54,27 @@ namespace OnlyChain.Core {
         public static implicit operator Address(string address) => new Address(address);
 
         public readonly int CompareTo(Address other) {
-            fixed (Address* @this = &this) {
-                if (BitConverter.IsLittleEndian) {
-                    ulong v1 = BinaryPrimitives.ReverseEndianness(((ulong*)@this)[0]);
-                    ulong v2 = BinaryPrimitives.ReverseEndianness(((ulong*)&other)[0]);
-                    if (v1 < v2) return -1; else if (v1 > v2) return 1;
-                    v1 = BinaryPrimitives.ReverseEndianness(((ulong*)@this)[1]);
-                    v2 = BinaryPrimitives.ReverseEndianness(((ulong*)&other)[1]);
-                    if (v1 < v2) return -1; else if (v1 > v2) return 1;
-                    v1 = BinaryPrimitives.ReverseEndianness(((uint*)@this)[4]);
-                    v2 = BinaryPrimitives.ReverseEndianness(((uint*)&other)[4]);
-                    return v1.CompareTo(v2);
-                } else {
-                    ulong v1 = ((ulong*)@this)[0];
-                    ulong v2 = ((ulong*)&other)[0];
-                    if (v1 < v2) return -1; else if (v1 > v2) return 1;
-                    v1 = ((ulong*)@this)[1];
-                    v2 = ((ulong*)&other)[1];
-                    if (v1 < v2) return -1; else if (v1 > v2) return 1;
-                    v1 = ((uint*)@this)[4];
-                    v2 = ((uint*)&other)[4];
-                    return v1.CompareTo(v2);
-                }
+            ref Address @this = ref Unsafe.AsRef(this);
+            if (BitConverter.IsLittleEndian) {
+                ulong v1 = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 0));
+                ulong v2 = BinaryPrimitives.ReverseEndianness(((ulong*)&other)[0]);
+                if (v1 < v2) return -1; else if (v1 > v2) return 1;
+                v1 = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 1));
+                v2 = BinaryPrimitives.ReverseEndianness(((ulong*)&other)[1]);
+                if (v1 < v2) return -1; else if (v1 > v2) return 1;
+                v1 = BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Address, uint>(ref @this), 4));
+                v2 = BinaryPrimitives.ReverseEndianness(((uint*)&other)[4]);
+                return v1.CompareTo(v2);
+            } else {
+                ulong v1 = Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 0);
+                ulong v2 = ((ulong*)&other)[0];
+                if (v1 < v2) return -1; else if (v1 > v2) return 1;
+                v1 = Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 1);
+                v2 = ((ulong*)&other)[1];
+                if (v1 < v2) return -1; else if (v1 > v2) return 1;
+                v1 = Unsafe.Add(ref Unsafe.As<Address, uint>(ref @this), 4);
+                v2 = ((uint*)&other)[4];
+                return v1.CompareTo(v2);
             }
         }
 
@@ -100,29 +98,28 @@ namespace OnlyChain.Core {
         /// </summary>
         public readonly int Log2 {
             get {
-                fixed (Address* p = &this) {
-                    if (BitConverter.IsLittleEndian) { // 大部分CPU应该都支持lzcnt指令
-                        var r = BitOperations.LeadingZeroCount(BinaryPrimitives.ReverseEndianness(((ulong*)p)[0]));
-                        if (r < 64) return 159 - r;
-                        r = BitOperations.LeadingZeroCount(BinaryPrimitives.ReverseEndianness(((ulong*)p)[1]));
-                        if (r < 64) return 95 - r;
-                        r = BitOperations.LeadingZeroCount(BinaryPrimitives.ReverseEndianness(((uint*)p)[4]));
-                        return 31 - r;
-                    } else {
-                        var r = BitOperations.LeadingZeroCount(((ulong*)p)[0]);
-                        if (r < 64) return 159 - r;
-                        r = BitOperations.LeadingZeroCount(((ulong*)p)[1]);
-                        if (r < 64) return 95 - r;
-                        r = BitOperations.LeadingZeroCount(((uint*)p)[4]);
-                        return 31 - r;
-                    }
+                ref Address @this = ref Unsafe.AsRef(this);
+                if (BitConverter.IsLittleEndian) { // 大部分CPU应该都支持lzcnt指令
+                    var r = BitOperations.LeadingZeroCount(BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 0)));
+                    if (r < 64) return 159 - r;
+                    r = BitOperations.LeadingZeroCount(BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 1)));
+                    if (r < 64) return 95 - r;
+                    r = BitOperations.LeadingZeroCount(BinaryPrimitives.ReverseEndianness(Unsafe.Add(ref Unsafe.As<Address, uint>(ref @this), 4)));
+                    return 31 - r;
+                } else {
+                    var r = BitOperations.LeadingZeroCount(Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 0));
+                    if (r < 64) return 159 - r;
+                    r = BitOperations.LeadingZeroCount(Unsafe.Add(ref Unsafe.As<Address, ulong>(ref @this), 1));
+                    if (r < 64) return 95 - r;
+                    r = BitOperations.LeadingZeroCount(Unsafe.Add(ref Unsafe.As<Address, uint>(ref @this), 4));
+                    return 31 - r;
                 }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly void WriteToBytes(Span<byte> buffer) {
-            fixed (Address* p = &this) new ReadOnlySpan<byte>(p, sizeof(Address)).CopyTo(buffer);
+            ReadOnlySpan.CopyTo(buffer);
         }
 
         /// <summary>
@@ -133,7 +130,8 @@ namespace OnlyChain.Core {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly bool Bit(int bitIndex) {
             if (bitIndex < 0 || bitIndex >= sizeof(Address) * 8) throw new ArgumentOutOfRangeException(nameof(bitIndex));
-            fixed (Address* p = &this) return (((byte*)p)[Size - 1 - (bitIndex >> 3)] & (1 << (bitIndex & 7))) != 0;
+            ref var p = ref Unsafe.As<Address, byte>(ref Unsafe.AsRef(this));
+            return (Unsafe.Add(ref p, Size - 1 - (bitIndex >> 3)) & (1 << (bitIndex & 7))) != 0;
         }
     }
 }

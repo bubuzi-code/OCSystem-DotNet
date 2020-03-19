@@ -202,12 +202,11 @@ namespace OnlyChain.Core {
             static ValueNode CreateValue(ref AddArgs args) {
                 args.Result = true;
                 args.Update = false;
-                return new ValueNode(args.Generation, args.HashAlgorithm.ComputeHash(args.Value), args.Value);
+                return new ValueNode(args.Generation, args.Value);
             }
 
             public ref struct AddArgs {
                 public TValue Value;
-                public IHashAlgorithm<TValue, THash> HashAlgorithm;
                 public int Generation;
                 public bool Result;
                 public bool Update;
@@ -215,11 +214,23 @@ namespace OnlyChain.Core {
 
             public ref struct RemoveArgs {
                 public TValue Value;
-                public IHashAlgorithm<TValue, THash> HashAlgorithm;
                 public int Generation;
                 public bool Result;
                 public bool NeedCompareValue;
                 public bool NeedSetValue;
+            }
+
+            public ref struct ComputeHashArgs {
+                public byte* Key;
+                public IHashAlgorithm HashAlgorithm;
+                public int Generation;
+            }
+
+            public ref struct FindFillHashArgs {
+                public byte* Key;
+                public bool Result;
+                public bool LeftBound;
+                public bool RightBound;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -228,15 +239,9 @@ namespace OnlyChain.Core {
 
             public abstract class Node {
                 public readonly int Generation;
-
                 public THash Hash;
 
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                public Node(int generation, THash hash) {
-                    Generation = generation;
-                    Hash = hash;
-                }
-
                 public Node(int generation) {
                     Generation = generation;
                 }
@@ -246,30 +251,21 @@ namespace OnlyChain.Core {
                 public abstract Node? Remove(ref RemoveArgs args, byte* key);
                 public abstract bool TryGetValue(byte* key, [MaybeNullWhen(false)] out TValue value);
                 public virtual Node PrefixConcat<TBlock>(LongPathNode<TBlock> parent) where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock => parent;
+                public abstract void ComputeHash(ref ComputeHashArgs args, int index);
+                public abstract IHashNode FindFillHash(ref FindFillHashArgs args, int index);
             }
 
 
             public sealed class EmptyNode : Node {
                 private Node? child;
 
-                public EmptyNode(int generation, THash hash) : base(generation, hash) => child = null;
-
-                private EmptyNode(int generation, Node child) : base(generation, child.Hash) => this.child = child;
+                public EmptyNode(int generation) : base(generation) => child = null;
 
                 public override Node Add(ref AddArgs args, byte* key, int length) {
-                    Node newChild;
                     if (child is null) {
-                        newChild = CreateLongPathNode(args.Generation, key, length, CreateValue(ref args));
+                        child = CreateLongPathNode(args.Generation, key, length, CreateValue(ref args));
                     } else {
-                        newChild = child.Add(ref args, key, length);
-                    }
-
-                    if (args.Result) {
-                        if (Generation == args.Generation) {
-                            child = newChild;
-                        } else if (child != newChild) {
-                            return new EmptyNode(args.Generation, newChild);
-                        }
+                        child = child.Add(ref args, key, length);
                     }
                     return this;
                 }
@@ -279,20 +275,7 @@ namespace OnlyChain.Core {
                 }
 
                 public override Node? Remove(ref RemoveArgs args, byte* key) {
-                    if (child != null) {
-                        Node? newChild = child.Remove(ref args, key);
-                        if (args.Result) {
-                            if (Generation == args.Generation) {
-                                child = newChild;
-                            } else if (child != newChild) {
-                                if (newChild != null) {
-                                    return new EmptyNode(args.Generation, newChild);
-                                } else {
-                                    return new EmptyNode(args.Generation, args.HashAlgorithm.ComputeHash(ReadOnlySpan<THash>.Empty));
-                                }
-                            }
-                        }
-                    }
+                    child = child?.Remove(ref args, key);
                     return this;
                 }
 
@@ -304,16 +287,28 @@ namespace OnlyChain.Core {
                     return child.TryGetValue(key, out value);
                 }
 
-                public EmptyNode Clear(ref RemoveArgs args) {
-                    if (child != null) {
-                        if (Generation == args.Generation) {
-                            child = null;
-                        } else {
-                            return new EmptyNode(args.Generation, args.HashAlgorithm.ComputeHash(ReadOnlySpan<THash>.Empty));
+                public override IHashNode FindFillHash(ref FindFillHashArgs args, int index = 0) {
+                    if (child is null) return new TreeHashNode();
+                    return child.FindFillHash(ref args, index);
+                }
+
+                public override void ComputeHash(ref ComputeHashArgs args, int index) {
+                    if (child is null) {
+                        Hash = args.HashAlgorithm.ComputeHash(ReadOnlySpan<THash>.Empty);
+                    } else {
+                        if (child.Generation == args.Generation) {
+                            child.ComputeHash(ref args, index);
                         }
+                        Hash = child.Hash;
                     }
+                }
+
+                public EmptyNode Clear() {
+                    child = null;
                     return this;
                 }
+
+                public EmptyNode Clone(int generation) => new EmptyNode(generation) { child = child };
             }
 
             public sealed class PrefixMapNode : Node {
@@ -355,6 +350,101 @@ namespace OnlyChain.Core {
                     }
                     value = default!;
                     return false;
+                }
+
+                public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
+                    byte* childIndexes = stackalloc byte[16];
+                    int childCount = 0;
+                    for (int i = 0; i < 16; i++) {
+                        if (this[i] != null) {
+                            childIndexes[childCount++] = (byte)i;
+                        }
+                    }
+
+                    var resultChildren = new IHashNode[childCount];
+                    if (!(args.LeftBound | args.RightBound)) {
+                        int leftIndex = -1, rightIndex = -1;
+                        IHashNode? leftNode = null, rightNode = null;
+                        byte currKey = args.Key[index];
+                        Node? child = this[currKey];
+
+                        if (child is Node) {
+                            var findChild = child.FindFillHash(ref args, index + 1);
+                            if (!(args.LeftBound | args.RightBound)) {
+                                for (int i = 0; i < resultChildren.Length; i++) {
+                                    if (childIndexes[i] != currKey) {
+                                        resultChildren[i] = new HashHashNode(this[childIndexes[i]]!.Hash);
+                                    } else {
+                                        resultChildren[i] = findChild;
+                                    }
+                                }
+                                goto Result;
+                            } else if (args.LeftBound) {
+                                rightIndex = currKey;
+                                rightNode = findChild;
+                            } else {
+                                leftIndex = currKey;
+                                leftNode = findChild;
+                            }
+                        } else {
+                            args.LeftBound = true;
+                            args.RightBound = true;
+                        }
+
+                        if (args.LeftBound) {
+                            for (int i = currKey - 1; i >= 0; i--) {
+                                child = this[i];
+                                if (child is Node) {
+                                    args.Key[index] = (byte)i;
+                                    var findRight = args.RightBound;
+                                    args.RightBound = false;
+                                    leftNode = child.FindFillHash(ref args, index + 1);
+                                    args.RightBound = findRight;
+                                    leftIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                        if (args.RightBound) {
+                            for (int i = currKey + 1; i < 16; i++) {
+                                child = this[i];
+                                if (child is Node) {
+                                    args.Key[index] = (byte)i;
+                                    var findLeft = args.LeftBound;
+                                    args.LeftBound = false;
+                                    rightNode = child.FindFillHash(ref args, index + 1);
+                                    args.LeftBound = findLeft;
+                                    rightIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        for (int i = 0; i < resultChildren.Length; i++) {
+                            if (childIndexes[i] == leftIndex) {
+                                resultChildren[i] = leftNode!;
+                            } else if (childIndexes[i] == rightIndex) {
+                                resultChildren[i] = rightNode!;
+                            } else {
+                                resultChildren[i] = new HashHashNode(this[childIndexes[i]]!.Hash);
+                            }
+                        }
+                    } else if (args.LeftBound) {
+                        for (int i = 0; i < resultChildren.Length - 1; i++) {
+                            resultChildren[i] = new HashHashNode(this[childIndexes[i]]!.Hash);
+                        }
+                        args.Key[index] = childIndexes[childCount - 1];
+                        resultChildren[^1] = this[childIndexes[childCount - 1]]!.FindFillHash(ref args, index + 1);
+                    } else {
+                        args.Key[index] = childIndexes[0];
+                        resultChildren[0] = this[childIndexes[0]]!.FindFillHash(ref args, index + 1);
+                        for (int i = 1; i < resultChildren.Length; i++) {
+                            resultChildren[i] = new HashHashNode(this[childIndexes[i]]!.Hash);
+                        }
+                    }
+
+                Result:
+                    return new TreeHashNode(resultChildren);
                 }
 
                 public override Node Add(ref AddArgs args, byte* key, int length) {
@@ -428,6 +518,21 @@ namespace OnlyChain.Core {
                     return this[p1]!.PrefixConcat(result);
                 }
 
+                public override void ComputeHash(ref ComputeHashArgs args, int index) {
+                    THash* hashes = stackalloc THash[16];
+                    int count = 0;
+                    for (int i = 0; i < 16; i++) {
+                        if (this[i] is Node child) {
+                            if (args.Generation == child.Generation) {
+                                args.Key[index] = (byte)i;
+                                child.ComputeHash(ref args, index + 1);
+                            }
+                            hashes[count++] = child.Hash;
+                        }
+                    }
+                    Hash = args.HashAlgorithm.ComputeHash(new ReadOnlySpan<THash>(hashes, count));
+                }
+
                 public override string ToString() {
                     var list = new List<char>(16);
                     for (int i = 0; i < 16; i++) {
@@ -462,6 +567,56 @@ namespace OnlyChain.Core {
                     return false;
                 }
 
+                public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
+                    if (!(args.LeftBound | args.RightBound)) {
+                        if (args.Key[index] < prefix1) {
+                            args.RightBound = true;
+                            args.Key[index] = prefix1;
+                            var rightNode = child1.FindFillHash(ref args, index + 1);
+                            args.LeftBound = true;
+                            return new TreeHashNode(rightNode, new HashHashNode(child2.Hash));
+                        } else if (args.Key[index] == prefix1) {
+                            var findNode = child1.FindFillHash(ref args, index + 1);
+                            if (args.RightBound) {
+                                args.Key[index] = prefix2;
+                                var rightNode = child2.FindFillHash(ref args, index + 1);
+                                return new TreeHashNode(findNode, rightNode);
+                            }
+                            return new TreeHashNode(findNode, new HashHashNode(child2.Hash));
+                        } else if (args.Key[index] < prefix2) {
+                            args.LeftBound = true;
+                            args.Key[index] = prefix1;
+                            var leftNode = child1.FindFillHash(ref args, index + 1);
+                            args.RightBound = true;
+                            args.Key[index] = prefix2;
+                            var rightNode = child2.FindFillHash(ref args, index + 1);
+                            return new TreeHashNode(leftNode, rightNode);
+                        } else if (args.Key[index] == prefix2) {
+                            var findNode = child2.FindFillHash(ref args, index + 1);
+                            if (args.LeftBound) {
+                                args.Key[index] = prefix1;
+                                var leftNode = child1.FindFillHash(ref args, index + 1);
+                                return new TreeHashNode(leftNode, findNode);
+                            }
+                            return new TreeHashNode(new HashHashNode(child1.Hash), findNode);
+                        } else {
+                            args.LeftBound = true;
+                            args.Key[index] = prefix2;
+                            var leftNode = child2.FindFillHash(ref args, index + 1);
+                            args.RightBound = true;
+                            return new TreeHashNode(new HashHashNode(child1.Hash), leftNode);
+                        }
+                    } else if (args.LeftBound) {
+                        args.Key[index] = prefix2;
+                        var leftNode = child2.FindFillHash(ref args, index + 1);
+                        return new TreeHashNode(new HashHashNode(child1.Hash), leftNode);
+                    } else {
+                        args.Key[index] = prefix1;
+                        var rightNode = child1.FindFillHash(ref args, index + 1);
+                        return new TreeHashNode(rightNode, new HashHashNode(child2.Hash));
+                    }
+                }
+
                 public override Node Add(ref AddArgs args, byte* key, int length) {
                     if (*key == prefix1) {
                         Node? newChild = child1.Add(ref args, key + 1, length - 1);
@@ -494,17 +649,10 @@ namespace OnlyChain.Core {
                 }
 
                 public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
-                    if (prefix1 < prefix2) {
-                        key[index] = prefix1;
-                        foreach (var kv in child1.Enumerate(index + 1, key)) yield return kv;
-                        key[index] = prefix2;
-                        foreach (var kv in child2.Enumerate(index + 1, key)) yield return kv;
-                    } else {
-                        key[index] = prefix2;
-                        foreach (var kv in child2.Enumerate(index + 1, key)) yield return kv;
-                        key[index] = prefix1;
-                        foreach (var kv in child1.Enumerate(index + 1, key)) yield return kv;
-                    }
+                    key[index] = prefix1;
+                    foreach (var kv in child1.Enumerate(index + 1, key)) yield return kv;
+                    key[index] = prefix2;
+                    foreach (var kv in child2.Enumerate(index + 1, key)) yield return kv;
                 }
 
                 public override Node? Remove(ref RemoveArgs args, byte* key) {
@@ -538,28 +686,68 @@ namespace OnlyChain.Core {
                     return otherChild.PrefixConcat(result);
                 }
 
-                public override string ToString() {
-                    if (prefix1 < prefix2) {
-                        return $"[{"0123456789abcdef"[prefix1]},{"0123456789abcdef"[prefix2]}]";
-                    } else {
-                        return $"[{"0123456789abcdef"[prefix2]},{"0123456789abcdef"[prefix1]}]";
+                public override void ComputeHash(ref ComputeHashArgs args, int index) {
+                    THash* hashPair = stackalloc THash[2];
+                    if (child1.Generation == args.Generation) {
+                        args.Key[index] = prefix1;
+                        child1.ComputeHash(ref args, index + 1);
                     }
+                    if (child2.Generation == args.Generation) {
+                        args.Key[index] = prefix2;
+                        child2.ComputeHash(ref args, index + 1);
+                    }
+                    hashPair[0] = child1.Hash;
+                    hashPair[1] = child2.Hash;
+                    Hash = args.HashAlgorithm.ComputeHash(new ReadOnlySpan<THash>(hashPair, 2));
+                }
+
+                public override string ToString() {
+                    return $"[{"0123456789abcdef"[prefix1]},{"0123456789abcdef"[prefix2]}]";
                 }
             }
 
             public sealed class LongPathNode<TBlock> : Node where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock {
+                sealed class BlockRef {
+                    public TBlock Path;
+
+                    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                    public BlockRef(ReadOnlySpan<byte> key) {
+                        key.CopyTo(MemoryMarshal.CreateSpan(ref Unsafe.As<TBlock, byte>(ref Path), sizeof(TBlock)));
+                    }
+
+                    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                    public void PathWriteTo(Span<byte> span) {
+                        MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref Path), sizeof(TBlock)).CopyTo(span);
+                    }
+
+                    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                    public bool SequenceEqual(ReadOnlySpan<byte> key) {
+                        return key.SequenceEqual(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref Path), sizeof(TBlock)));
+                    }
+
+                    public ReadOnlySpan<byte> Span {
+                        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                        get => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref Path), sizeof(TBlock));
+                    }
+                }
+
                 static readonly int BlockSize = sizeof(TBlock);
 
-                private TBlock path;
+                private readonly BlockRef pathRef;
                 private Node child;
 
                 public LongPathNode(int generation, byte* key, Node child) : base(generation) {
-                    new ReadOnlySpan<byte>(key, sizeof(TBlock)).CopyTo(MemoryMarshal.CreateSpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)));
+                    pathRef = new BlockRef(new ReadOnlySpan<byte>(key, sizeof(TBlock)));
+                    this.child = child;
+                }
+
+                private LongPathNode(int generation, BlockRef pathRef, Node child) : base(generation) {
+                    this.pathRef = pathRef;
                     this.child = child;
                 }
 
                 public override Node Add(ref AddArgs args, byte* key, int length) {
-                    fixed (TBlock* path = &this.path) {
+                    fixed (TBlock* path = &pathRef.Path) {
                         int commonPrefix = 0;
                         for (; commonPrefix < sizeof(TBlock); commonPrefix++) {
                             if (((byte*)path)[commonPrefix] != key[commonPrefix]) goto Split;
@@ -570,7 +758,7 @@ namespace OnlyChain.Core {
                             if (Generation == args.Generation) {
                                 child = newChild;
                             } else if (child != newChild) {
-                                return new LongPathNode<TBlock>(args.Generation, key, newChild);
+                                return new LongPathNode<TBlock>(args.Generation, pathRef, newChild);
                             }
                         }
                         return this;
@@ -587,31 +775,44 @@ namespace OnlyChain.Core {
                     }
                 }
 
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                void PathWriteTo(Span<byte> span) {
-                    MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)).CopyTo(span);
-                }
-
                 public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
-                    PathWriteTo(key.AsSpan(index));
+                    pathRef.PathWriteTo(key.AsSpan(index));
                     foreach (var kv in child.Enumerate(index + BlockSize, key)) yield return kv;
                 }
 
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                private bool SequenceEqual(byte* key) {
-                    return new ReadOnlySpan<byte>(key, sizeof(TBlock)).SequenceEqual(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TBlock, byte>(ref path), sizeof(TBlock)));
-                }
-
                 public override bool TryGetValue(byte* key, out TValue value) {
-                    if (SequenceEqual(key)) {
+                    if (pathRef.SequenceEqual(new ReadOnlySpan<byte>(key, sizeof(TBlock)))) {
                         return child.TryGetValue(key + sizeof(TBlock), out value);
                     }
                     value = default!;
                     return false;
                 }
 
+                public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
+                    IHashNode findNode;
+                    var key = new Span<byte>(args.Key + index, sizeof(TBlock));
+                    if (!(args.LeftBound | args.RightBound)) {
+                        int cmp = key.SequenceCompareTo(pathRef.Span);
+                        if (cmp < 0) {
+                            pathRef.PathWriteTo(key);
+                            findNode = child.FindFillHash(ref args, index + sizeof(TBlock));
+                            args.LeftBound = true;
+                        } else if (cmp > 0) {
+                            pathRef.PathWriteTo(key);
+                            findNode = child.FindFillHash(ref args, index + sizeof(TBlock));
+                            args.RightBound = true;
+                        } else {
+                            findNode = child.FindFillHash(ref args, index + sizeof(TBlock));
+                        }
+                    } else {
+                        pathRef.PathWriteTo(key);
+                        findNode = child.FindFillHash(ref args, index + sizeof(TBlock));
+                    }
+                    return findNode;
+                }
+
                 public override Node? Remove(ref RemoveArgs args, byte* key) {
-                    if (SequenceEqual(key)) {
+                    if (pathRef.SequenceEqual(new ReadOnlySpan<byte>(key, sizeof(TBlock)))) {
                         var newChild = child.Remove(ref args, key + sizeof(TBlock));
                         if (args.Result) {
                             if (newChild is null) return null;
@@ -628,33 +829,42 @@ namespace OnlyChain.Core {
 
                 public override Node PrefixConcat<TPrefixBlock>(LongPathNode<TPrefixBlock> parent) {
                     var path = stackalloc byte[sizeof(TPrefixBlock) + sizeof(TBlock)];
-                    parent.PathWriteTo(new Span<byte>(path, sizeof(TPrefixBlock)));
-                    PathWriteTo(new Span<byte>(path + sizeof(TPrefixBlock), sizeof(TBlock)));
+                    parent.pathRef.PathWriteTo(new Span<byte>(path, sizeof(TPrefixBlock)));
+                    pathRef.PathWriteTo(new Span<byte>(path + sizeof(TPrefixBlock), sizeof(TBlock)));
                     return CreateLongPathNode(parent.Generation, path, sizeof(TPrefixBlock) + sizeof(TBlock), child);
                 }
 
-                public override string ToString() {
-                    var chars = stackalloc char[sizeof(TBlock)];
-                    for (int i = 0; i < sizeof(TBlock); i++) {
-                        chars[i] = "0123456789abcdef"[Unsafe.Add(ref Unsafe.As<TBlock, byte>(ref path), i)];
+                public override void ComputeHash(ref ComputeHashArgs args, int index) {
+                    if (child.Generation == args.Generation) {
+                        pathRef.PathWriteTo(new Span<byte>(args.Key + index, sizeof(TBlock)));
+                        child.ComputeHash(ref args, index + sizeof(TBlock));
                     }
-                    return new string(chars, 0, sizeof(TBlock)) + ",length=" + sizeof(TBlock);
+                    Hash = child.Hash;
+                }
+
+                public override string ToString() {
+                    fixed (TBlock* path = &pathRef.Path) {
+                        var chars = stackalloc char[sizeof(TBlock)];
+                        for (int i = 0; i < sizeof(TBlock); i++) {
+                            chars[i] = "0123456789abcdef"[((byte*)path)[i]];
+                        }
+                        return new string(chars, 0, sizeof(TBlock)) + ",length=" + sizeof(TBlock);
+                    }
                 }
             }
 
             public sealed class ValueNode : Node {
                 private TValue value;
 
-                public ValueNode(int generation, THash hash, TValue value) : base(generation, hash) => this.value = value;
+                public ValueNode(int generation, TValue value) : base(generation) => this.value = value;
 
                 public override Node Add(ref AddArgs args, byte* key, int length) {
                     if (args.Update) {
                         args.Result = true;
                         if (Generation == args.Generation) {
                             value = args.Value;
-                            Hash = args.HashAlgorithm.ComputeHash(args.Value);
                         } else {
-                            return new ValueNode(args.Generation, args.HashAlgorithm.ComputeHash(args.Value), args.Value);
+                            return new ValueNode(args.Generation, args.Value);
                         }
                     }
                     return this;
@@ -663,6 +873,17 @@ namespace OnlyChain.Core {
                 public override bool TryGetValue(byte* key, out TValue value) {
                     value = this.value;
                     return true;
+                }
+
+                public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
+                    if (!(args.LeftBound | args.RightBound)) {
+                        args.Result = true;
+                    }
+                    args.LeftBound = false;
+                    args.RightBound = false;
+                    TKey key;
+                    BufferToKey(args.Key, &key);
+                    return new ValueHashNode(key, value);
                 }
 
                 public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
@@ -682,7 +903,41 @@ namespace OnlyChain.Core {
                     return null;
                 }
 
+                public override void ComputeHash(ref ComputeHashArgs args, int index) {
+                    TKey key;
+                    BufferToKey(args.Key, &key);
+                    Hash = args.HashAlgorithm.ComputeHash(key, value);
+                }
+
                 public override string? ToString() => value?.ToString();
+            }
+
+            [System.Diagnostics.DebuggerDisplay("Children Count: {Children.Count}")]
+            public sealed class TreeHashNode : IHashNode {
+                public HashNodeType Type => HashNodeType.Node;
+                public IReadOnlyList<IHashNode> Children { get; }
+
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public TreeHashNode(params IHashNode[] children) => Children = children;
+            }
+
+            [System.Diagnostics.DebuggerDisplay("Hash:{Hash}")]
+            public sealed class HashHashNode : IHashNode {
+                public HashNodeType Type => HashNodeType.Hash;
+                public THash Hash { get; }
+
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public HashHashNode(THash hash) => Hash = hash;
+            }
+
+            [System.Diagnostics.DebuggerDisplay("Key:{Key},Value:{Value}")]
+            public sealed class ValueHashNode : IHashNode {
+                public HashNodeType Type => HashNodeType.Value;
+                public TKey Key { get; }
+                public TValue Value { get; }
+
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public ValueHashNode(TKey key, TValue value) => (Key, Value) = (key, value);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -700,31 +955,79 @@ namespace OnlyChain.Core {
                 }
             }
         }
+
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "<挂起>")]
+        public interface IHashAlgorithm {
+            THash ComputeHash(TKey key, TValue value);
+            THash ComputeHash(ReadOnlySpan<THash> hashes);
+        }
+
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "<挂起>")]
+        public interface IHashNode {
+            HashNodeType Type { get; }
+            IReadOnlyList<IHashNode> Children => throw MerklePatriciaTreeSupport.NotSupportedException;
+            THash Hash => throw MerklePatriciaTreeSupport.NotSupportedException;
+            TKey Key => throw MerklePatriciaTreeSupport.NotSupportedException;
+            TValue Value => throw MerklePatriciaTreeSupport.NotSupportedException;
+        }
     }
 
     unsafe public partial class MerklePatriciaTree<TKey, TValue, THash> : IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue> where TKey : unmanaged where TValue : notnull where THash : unmanaged {
         private Support.EmptyNode root;
-        private readonly IHashAlgorithm<TValue, THash> hashAlgorithm;
 
-        public MerklePatriciaTree(int generation, IHashAlgorithm<TValue, THash> hashAlgorithm) {
-            Generation = generation;
-            this.hashAlgorithm = hashAlgorithm ?? throw new ArgumentNullException(nameof(hashAlgorithm));
-            root = new Support.EmptyNode(generation, hashAlgorithm.ComputeHash(ReadOnlySpan<THash>.Empty));
+        public int Generation => root.Generation;
+
+        public THash RootHash => root.Hash;
+
+        public int Count { get; private set; }
+
+        public bool IsReadOnly { get; private set; } = false;
+
+
+        public MerklePatriciaTree(int generation) {
+            root = new Support.EmptyNode(generation);
             Count = 0;
         }
 
         public MerklePatriciaTree(MerklePatriciaTree<TKey, TValue, THash> parentTree, int generation) {
-            if (generation <= parentTree.Generation) throw new ArgumentOutOfRangeException(nameof(generation), "MPT代数太低");
+            if (generation <= parentTree.Generation) throw new ArgumentOutOfRangeException(nameof(generation), $"{nameof(generation)}太低");
 
-            Generation = generation;
-            root = parentTree.root;
-            hashAlgorithm = parentTree.hashAlgorithm;
+            if (!parentTree.IsReadOnly) throw new InvalidOperationException($"{nameof(parentTree)}必须先调用{nameof(ComputeHash)}方法");
+
+            root = parentTree.root.Clone(generation);
             Count = parentTree.Count;
         }
 
         public MerklePatriciaTree<TKey, TValue, THash> NewNext() => new MerklePatriciaTree<TKey, TValue, THash>(this, Generation + 1);
 
-        public int Generation { get; }
+        /// <summary>
+        /// 计算整棵树所有节点的Hash值，并使得该<see cref="MerklePatriciaTree{TKey, TValue, THash}"/>对象无法修改。
+        /// </summary>
+        /// <param name="hashAlgorithm"></param>
+        public void ComputeHash(IHashAlgorithm hashAlgorithm) {
+            if (!IsReadOnly) {
+                var buffer = stackalloc byte[sizeof(TKey) * 2];
+                var args = new Support.ComputeHashArgs {
+                    Key = buffer,
+                    HashAlgorithm = hashAlgorithm,
+                    Generation = Generation,
+                };
+                root.ComputeHash(ref args, 0);
+                IsReadOnly = true;
+            }
+        }
+
+        public bool FindHashTree(TKey key, out IHashNode hashTree) {
+            if (!IsReadOnly) throw new InvalidOperationException($"必须先调用{nameof(ComputeHash)}方法");
+
+            var buffer = stackalloc byte[sizeof(TKey) * 2];
+            Support.KeyToBuffer(&key, buffer);
+            var args = new Support.FindFillHashArgs {
+                Key = buffer
+            };
+            hashTree = root.FindFillHash(ref args);
+            return args.Result;
+        }
 
         public TValue this[TKey key] {
             get {
@@ -740,25 +1043,22 @@ namespace OnlyChain.Core {
 
         public ICollection<TValue> Values => new ValueEnumerator(this);
 
-        public int Count { get; private set; }
-
-        public bool IsReadOnly => false;
-
         IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys => Keys;
 
         IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => Values;
 
         private bool AddOrUpdate(TKey key, TValue value, bool update) {
+            if (IsReadOnly) throw new InvalidOperationException($"此{nameof(MerklePatriciaTree<TKey, TValue, THash>)}是只读的");
+
             var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.AddArgs {
-                HashAlgorithm = hashAlgorithm,
                 Generation = Generation,
                 Value = value,
                 Update = update,
             };
-            root = (Support.EmptyNode)root.Add(ref args, keyBuffer, sizeof(TKey) * 2);
+            root.Add(ref args, keyBuffer, sizeof(TKey) * 2);
             if (args.Result & !args.Update) {
                 Count++;
             }
@@ -778,12 +1078,10 @@ namespace OnlyChain.Core {
         public bool TryAdd(TKey key, TValue value) => AddOrUpdate(key, value, false);
 
         public void Clear() {
+            if (IsReadOnly) throw new InvalidOperationException($"此{nameof(MerklePatriciaTree<TKey, TValue, THash>)}是只读的");
+
             if (Count != 0) {
-                var args = new Support.RemoveArgs {
-                    HashAlgorithm = hashAlgorithm,
-                    Generation = Generation,
-                };
-                root = root.Clear(ref args);
+                root = root.Clear();
                 Count = 0;
             }
         }
@@ -819,16 +1117,17 @@ namespace OnlyChain.Core {
         }
 
         public bool Remove(TKey key) {
+            if (IsReadOnly) throw new InvalidOperationException($"此{nameof(MerklePatriciaTree<TKey, TValue, THash>)}是只读的");
+
             if (Count == 0) return false;
 
             var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.RemoveArgs {
-                HashAlgorithm = hashAlgorithm,
                 Generation = Generation,
             };
-            root = (Support.EmptyNode)root.Remove(ref args, keyBuffer)!;
+            root.Remove(ref args, keyBuffer);
             if (args.Result) {
                 Count--;
                 return true;
@@ -837,6 +1136,8 @@ namespace OnlyChain.Core {
         }
 
         public bool Remove(KeyValuePair<TKey, TValue> item) {
+            if (IsReadOnly) throw new InvalidOperationException($"此{nameof(MerklePatriciaTree<TKey, TValue, THash>)}是只读的");
+
             if (Count == 0) return false;
 
             TKey key = item.Key;
@@ -844,12 +1145,11 @@ namespace OnlyChain.Core {
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.RemoveArgs {
-                HashAlgorithm = hashAlgorithm,
                 Generation = Generation,
                 Value = item.Value,
                 NeedCompareValue = true,
             };
-            root = (Support.EmptyNode)root.Remove(ref args, keyBuffer)!;
+            root.Remove(ref args, keyBuffer);
             if (args.Result) {
                 Count--;
                 return true;
@@ -858,6 +1158,8 @@ namespace OnlyChain.Core {
         }
 
         public bool Remove(TKey key, out TValue value) {
+            if (IsReadOnly) throw new InvalidOperationException($"此{nameof(MerklePatriciaTree<TKey, TValue, THash>)}是只读的");
+
             if (Count == 0) {
                 value = default!;
                 return false;
@@ -867,11 +1169,10 @@ namespace OnlyChain.Core {
             Support.KeyToBuffer(&key, keyBuffer);
 
             var args = new Support.RemoveArgs {
-                HashAlgorithm = hashAlgorithm,
                 Generation = Generation,
                 NeedSetValue = true,
             };
-            root = (Support.EmptyNode)root.Remove(ref args, keyBuffer)!;
+            root.Remove(ref args, keyBuffer);
             if (args.Result) {
                 Count--;
                 value = args.Value;

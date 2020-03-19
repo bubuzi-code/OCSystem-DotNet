@@ -29,11 +29,19 @@ namespace OnlyChain.Core {
         }
 
         /// <summary>
-        /// 栈上的<see cref="Hash{TSize}"/>对象使用此属性才是安全的。
+        /// 栈上的非只读<see cref="Hash{TSize}"/>对象使用此属性才是安全的。
         /// </summary>
         public Span<byte> Span {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => MemoryMarshal.CreateSpan(ref Unsafe.As<TSize, byte>(ref buffer), sizeof(TSize));
+        }
+
+        /// <summary>
+        /// 栈上的<see cref="Hash{TSize}"/>对象使用此属性才是安全的。
+        /// </summary>
+        public readonly ReadOnlySpan<byte> ReadOnlySpan {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TSize, byte>(ref Unsafe.AsRef(buffer)), sizeof(TSize));
         }
 
         public static ref Hash<TSize> FromSpan(Span<byte> span) {
@@ -47,26 +55,24 @@ namespace OnlyChain.Core {
             return result;
         }
 
-        public override string ToString() => Hex.ToString(this);
+        public readonly override string ToString() => Hex.ToString(this);
 
-        public override int GetHashCode() {
-            fixed (Hash<TSize>* p = &this) {
-                return ((int*)p)[sizeof(TSize) / 4 - 1];
-            }
+        public readonly override int GetHashCode() {
+            return Unsafe.Add(ref Unsafe.As<TSize, int>(ref Unsafe.AsRef(buffer)), sizeof(TSize) / 4 - 1);
         }
 
-        public override bool Equals(object obj) => obj is Hash<TSize> other && Equals(other);
+        public readonly override bool Equals(object obj) => obj is Hash<TSize> other && Equals(other);
 
-        public bool Equals(Hash<TSize> other) {
-            fixed (Hash<TSize>* @this = &this) {
-                for (int i = 0; i < sizeof(TSize) / 8; i++) {
-                    if (((ulong*)@this)[i] != ((ulong*)&other)[i]) return false;
-                }
-                if (sizeof(TSize) % 8 != 0) {
-                    return ((uint*)@this)[sizeof(TSize) / 4 - 1] == ((uint*)&other)[sizeof(TSize) / 4 - 1];
-                }
-                return true;
+        public readonly bool Equals(Hash<TSize> other) {
+            ref var @this = ref Unsafe.AsRef(buffer);
+            for (int i = 0; i < sizeof(TSize) / 8; i++) {
+                if (Unsafe.Add(ref Unsafe.As<TSize, ulong>(ref @this), i) != ((ulong*)&other)[i]) return false;
             }
+            if (sizeof(TSize) % 8 != 0) {
+                return Unsafe.Add(ref Unsafe.As<TSize, uint>(ref @this), sizeof(TSize) / 4 - 1) == ((uint*)&other)[sizeof(TSize) / 4 - 1];
+            }
+            return true;
+
         }
 
         public static bool operator ==(Hash<TSize> left, Hash<TSize> right) => left.Equals(right);
@@ -74,14 +80,10 @@ namespace OnlyChain.Core {
 
         public static implicit operator Hash<TSize>(string strHash) => new Hash<TSize>(strHash);
 
-        public void WriteToBytes(Span<byte> buffer) {
-            fixed (Hash<TSize>* p = &this) new ReadOnlySpan<byte>(p, sizeof(TSize)).CopyTo(buffer);
+        public readonly void WriteToBytes(Span<byte> buffer) {
+            ReadOnlySpan.CopyTo(buffer);
         }
 
-        public byte[] ToArray() {
-            var result = new byte[sizeof(TSize)];
-            WriteToBytes(result);
-            return result;
-        }
+        public readonly byte[] ToArray() => ReadOnlySpan.ToArray();
     }
 }
