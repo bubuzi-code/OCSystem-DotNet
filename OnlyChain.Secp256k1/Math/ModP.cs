@@ -88,6 +88,7 @@ namespace OnlyChain.Secp256k1.Math {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static U256 Inverse(in U256 a) {
+            if (a.IsZero) throw new DivideByZeroException();
             u256_inv_p(a, out var ret);
             return ret;
         }

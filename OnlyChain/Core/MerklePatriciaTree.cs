@@ -979,6 +979,8 @@ namespace OnlyChain.Core {
 
         public THash RootHash => root.Hash;
 
+        public MerklePatriciaTree<TKey, TValue, THash>? Parent { get; }
+
         public int Count { get; private set; }
 
         public bool IsReadOnly { get; private set; } = false;
@@ -987,18 +989,18 @@ namespace OnlyChain.Core {
         public MerklePatriciaTree(int generation) {
             root = new Support.EmptyNode(generation);
             Count = 0;
+            Parent = null;
         }
 
-        public MerklePatriciaTree(MerklePatriciaTree<TKey, TValue, THash> parentTree, int generation) {
-            if (generation <= parentTree.Generation) throw new ArgumentOutOfRangeException(nameof(generation), $"{nameof(generation)}太低");
-
+        private MerklePatriciaTree(MerklePatriciaTree<TKey, TValue, THash> parentTree) {
             if (!parentTree.IsReadOnly) throw new InvalidOperationException($"{nameof(parentTree)}必须先调用{nameof(ComputeHash)}方法");
 
-            root = parentTree.root.Clone(generation);
+            root = parentTree.root.Clone(parentTree.Generation + 1);
             Count = parentTree.Count;
+            Parent = parentTree;
         }
 
-        public MerklePatriciaTree<TKey, TValue, THash> NewNext() => new MerklePatriciaTree<TKey, TValue, THash>(this, Generation + 1);
+        public MerklePatriciaTree<TKey, TValue, THash> NextNew() => new MerklePatriciaTree<TKey, TValue, THash>(this);
 
         /// <summary>
         /// 计算整棵树所有节点的Hash值，并使得该<see cref="MerklePatriciaTree{TKey, TValue, THash}"/>对象无法修改。

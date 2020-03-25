@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 
 namespace OnlyChain.Core {
     public static class Hex {
-        static readonly byte[] CharToHexTable = {
+        static ReadOnlySpan<byte> CharToHexTable => new byte[] {
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 15
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 31
             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 47
@@ -18,7 +18,7 @@ namespace OnlyChain.Core {
         unsafe public static T Parse<T>(ReadOnlySpan<char> hexChars) where T : unmanaged {
             if (hexChars.Length != sizeof(T) * 2) throw new ArgumentOutOfRangeException(nameof(hexChars), $"必须是{sizeof(T) * 2}个字符");
 
-            ref byte table = ref MemoryMarshal.GetReference((ReadOnlySpan<byte>)CharToHexTable);
+            ref byte table = ref MemoryMarshal.GetReference(CharToHexTable);
             ref char charFirst = ref MemoryMarshal.GetReference(hexChars);
             T r = default;
             for (int i = 0; i < sizeof(T); i++) {
@@ -32,27 +32,27 @@ namespace OnlyChain.Core {
             return r;
         }
 
-        static readonly char[] HexTemplate = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+        static ReadOnlySpan<byte> HexTemplate => new[] { (byte)'0', (byte)'1', (byte)'2', (byte)'3', (byte)'4', (byte)'5', (byte)'6', (byte)'7', (byte)'8', (byte)'9', (byte)'a', (byte)'b', (byte)'c', (byte)'d', (byte)'e', (byte)'f' };
 
         unsafe public static string ToString(ReadOnlySpan<byte> bytes) {
-            ref char hexTemplate = ref MemoryMarshal.GetReference((ReadOnlySpan<char>)HexTemplate);
+            ref byte hexTemplate = ref MemoryMarshal.GetReference(HexTemplate);
             ref byte buffer = ref MemoryMarshal.GetReference(bytes);
             char* chars = stackalloc char[bytes.Length * 2];
             for (int i = 0; i < bytes.Length; i++) {
                 var v = Unsafe.Add(ref buffer, i);
-                chars[2 * i] = Unsafe.Add(ref hexTemplate, v >> 4);
-                chars[2 * i + 1] = Unsafe.Add(ref hexTemplate, v & 15);
+                chars[2 * i] = (char)Unsafe.Add(ref hexTemplate, v >> 4);
+                chars[2 * i + 1] = (char)Unsafe.Add(ref hexTemplate, v & 15);
             }
             return new string(chars, 0, bytes.Length * 2);
         }
 
         unsafe public static string ToString<T>(T bytes) where T : unmanaged {
-            ref char hexTemplate = ref MemoryMarshal.GetReference((ReadOnlySpan<char>)HexTemplate);
+            ref byte hexTemplate = ref MemoryMarshal.GetReference(HexTemplate);
             char* chars = stackalloc char[sizeof(T) * 2];
             for (int i = 0; i < sizeof(T); i++) {
                 byte v = ((byte*)&bytes)[i];
-                chars[2 * i] = Unsafe.Add(ref hexTemplate, v >> 4);
-                chars[2 * i + 1] = Unsafe.Add(ref hexTemplate, v & 15);
+                chars[2 * i] = (char)Unsafe.Add(ref hexTemplate, v >> 4);
+                chars[2 * i + 1] = (char)Unsafe.Add(ref hexTemplate, v & 15);
             }
             return new string(chars, 0, sizeof(T) * 2);
         }
