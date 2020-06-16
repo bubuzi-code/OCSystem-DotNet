@@ -1,23 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Diagnostics.CodeAnalysis;
 
 namespace OnlyChain.Core {
     /// <summary>
     /// Only币，精度为亿分之一
     /// </summary>
-    public readonly struct Coin {
-        const ulong TotalCoin = 1_000_000_000_000_000_000;
-
+    public readonly struct Coin : IEquatable<Coin> {
         private readonly ulong value;
 
-        public Coin(ulong value) => this.value = value <= TotalCoin ? value : throw new ArgumentOutOfRangeException(nameof(value), "超出系统最大代币量");
-        public Coin(long value) => this.value = value >= 0 && value <= (long)TotalCoin ? (ulong)value : throw new ArgumentOutOfRangeException(nameof(value), "超出范围");
+        public Coin(ulong value) => this.value = value;
+        public Coin(long value) => this.value = value >= 0 ? (ulong)value : throw new ArgumentOutOfRangeException(nameof(value), "不能小于0");
 
         public static implicit operator ulong(Coin @this) => @this.value;
         public static implicit operator Coin(ulong value) => new Coin(value);
-        public static implicit operator long(Coin @this) => (long)@this.value;
-        public static implicit operator Coin(long value) => new Coin(value);
+        public static explicit operator long(Coin @this) => (long)@this.value;
+        public static explicit operator Coin(long value) => new Coin(value);
+        public static explicit operator decimal(Coin @this) => @this.value / 10000_0000m;
 
         public static Coin FromWhole(decimal value) => value >= 0 ? new Coin((ulong)(value * 10000_0000m)) : throw new ArgumentOutOfRangeException(nameof(value), "代币数量不能小于0");
 
@@ -45,6 +43,20 @@ namespace OnlyChain.Core {
             if (decimalLength == 0) decimalLength = -1;
 
             return new string(buffer, 21 - length, length + decimalLength - 8);
+        }
+
+        public override bool Equals(object obj) => obj is Coin other && value == other.value;
+
+        public override int GetHashCode() => value.GetHashCode();
+
+        public bool Equals([AllowNull] Coin other) => value == other.value;
+
+        public static bool operator ==(Coin left, Coin right) {
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(Coin left, Coin right) {
+            return !(left == right);
         }
     }
 }

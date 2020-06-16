@@ -249,7 +249,7 @@ namespace OnlyChain.Core {
                 public abstract Node Add(ref AddArgs args, byte* key, int length);
                 public abstract IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key);
                 public abstract Node? Remove(ref RemoveArgs args, byte* key);
-                public abstract bool TryGetValue(byte* key, [MaybeNullWhen(false)] out TValue value);
+                public abstract ref TValue TryGetValue(byte* key);
                 public virtual Node PrefixConcat<TBlock>(LongPathNode<TBlock> parent) where TBlock : unmanaged, MerklePatriciaTreeSupport.IBlock => parent;
                 public abstract void ComputeHash(ref ComputeHashArgs args, int index);
                 public abstract IHashNode FindFillHash(ref FindFillHashArgs args, int index);
@@ -279,16 +279,15 @@ namespace OnlyChain.Core {
                     return this;
                 }
 
-                public override bool TryGetValue(byte* key, out TValue value) {
+                public override ref TValue TryGetValue(byte* key) {
                     if (child is null) {
-                        value = default!;
-                        return false;
+                        return ref Unsafe.AsRef<TValue>(null);
                     }
-                    return child.TryGetValue(key, out value);
+                    return ref child.TryGetValue(key);
                 }
 
                 public override IHashNode FindFillHash(ref FindFillHashArgs args, int index = 0) {
-                    if (child is null) return new TreeHashNode();
+                    if (child is null) return new TreeHashNode(Hash);
                     return child.FindFillHash(ref args, index);
                 }
 
@@ -341,22 +340,21 @@ namespace OnlyChain.Core {
                 public PrefixMapNode(int generation) : base(generation) { }
 
                 private PrefixMapNode(int generation, PrefixMapNode other) : base(generation) {
-                    MemoryMarshal.CreateReadOnlySpan(ref other.children.child_0, 16).CopyTo(MemoryMarshal.CreateSpan(ref children.child_0, 16));
+                    children = other.children;
                 }
 
-                public override bool TryGetValue(byte* key, out TValue value) {
+                public override ref TValue TryGetValue(byte* key) {
                     if (this[*key] is Node child) {
-                        return child.TryGetValue(key + 1, out value);
+                        return ref child.TryGetValue(key + 1);
                     }
-                    value = default!;
-                    return false;
+                    return ref Unsafe.AsRef<TValue>(null);
                 }
 
                 public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
                     byte* childIndexes = stackalloc byte[16];
                     int childCount = 0;
                     for (int i = 0; i < 16; i++) {
-                        if (this[i] != null) {
+                        if (this[i] is { }) {
                             childIndexes[childCount++] = (byte)i;
                         }
                     }
@@ -444,7 +442,7 @@ namespace OnlyChain.Core {
                     }
 
                 Result:
-                    return new TreeHashNode(resultChildren);
+                    return new TreeHashNode(Hash, resultChildren);
                 }
 
                 public override Node Add(ref AddArgs args, byte* key, int length) {
@@ -480,7 +478,7 @@ namespace OnlyChain.Core {
                     if (this[*key] is Node child) {
                         Node? newChild = child.Remove(ref args, key + 1);
                         if (!args.Result) return this;
-                        if (newChild != null) {
+                        if (newChild is { }) {
                             if (Generation == args.Generation) {
                                 this[*key] = newChild;
                                 return this;
@@ -560,11 +558,10 @@ namespace OnlyChain.Core {
                     }
                 }
 
-                public override bool TryGetValue(byte* key, out TValue value) {
-                    if (*key == prefix1) return child1.TryGetValue(key + 1, out value);
-                    if (*key == prefix2) return child2.TryGetValue(key + 1, out value);
-                    value = default!;
-                    return false;
+                public override ref TValue TryGetValue(byte* key) {
+                    if (*key == prefix1) return ref child1.TryGetValue(key + 1);
+                    if (*key == prefix2) return ref child2.TryGetValue(key + 1);
+                    return ref Unsafe.AsRef<TValue>(null);
                 }
 
                 public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
@@ -574,15 +571,15 @@ namespace OnlyChain.Core {
                             args.Key[index] = prefix1;
                             var rightNode = child1.FindFillHash(ref args, index + 1);
                             args.LeftBound = true;
-                            return new TreeHashNode(rightNode, new HashHashNode(child2.Hash));
+                            return new TreeHashNode(Hash, rightNode, new HashHashNode(child2.Hash));
                         } else if (args.Key[index] == prefix1) {
                             var findNode = child1.FindFillHash(ref args, index + 1);
                             if (args.RightBound) {
                                 args.Key[index] = prefix2;
                                 var rightNode = child2.FindFillHash(ref args, index + 1);
-                                return new TreeHashNode(findNode, rightNode);
+                                return new TreeHashNode(Hash, findNode, rightNode);
                             }
-                            return new TreeHashNode(findNode, new HashHashNode(child2.Hash));
+                            return new TreeHashNode(Hash, findNode, new HashHashNode(child2.Hash));
                         } else if (args.Key[index] < prefix2) {
                             args.LeftBound = true;
                             args.Key[index] = prefix1;
@@ -590,30 +587,30 @@ namespace OnlyChain.Core {
                             args.RightBound = true;
                             args.Key[index] = prefix2;
                             var rightNode = child2.FindFillHash(ref args, index + 1);
-                            return new TreeHashNode(leftNode, rightNode);
+                            return new TreeHashNode(Hash, leftNode, rightNode);
                         } else if (args.Key[index] == prefix2) {
                             var findNode = child2.FindFillHash(ref args, index + 1);
                             if (args.LeftBound) {
                                 args.Key[index] = prefix1;
                                 var leftNode = child1.FindFillHash(ref args, index + 1);
-                                return new TreeHashNode(leftNode, findNode);
+                                return new TreeHashNode(Hash, leftNode, findNode);
                             }
-                            return new TreeHashNode(new HashHashNode(child1.Hash), findNode);
+                            return new TreeHashNode(Hash, new HashHashNode(child1.Hash), findNode);
                         } else {
                             args.LeftBound = true;
                             args.Key[index] = prefix2;
                             var leftNode = child2.FindFillHash(ref args, index + 1);
                             args.RightBound = true;
-                            return new TreeHashNode(new HashHashNode(child1.Hash), leftNode);
+                            return new TreeHashNode(Hash, new HashHashNode(child1.Hash), leftNode);
                         }
                     } else if (args.LeftBound) {
                         args.Key[index] = prefix2;
                         var leftNode = child2.FindFillHash(ref args, index + 1);
-                        return new TreeHashNode(new HashHashNode(child1.Hash), leftNode);
+                        return new TreeHashNode(Hash, new HashHashNode(child1.Hash), leftNode);
                     } else {
                         args.Key[index] = prefix1;
                         var rightNode = child1.FindFillHash(ref args, index + 1);
-                        return new TreeHashNode(rightNode, new HashHashNode(child2.Hash));
+                        return new TreeHashNode(Hash, rightNode, new HashHashNode(child2.Hash));
                     }
                 }
 
@@ -780,12 +777,11 @@ namespace OnlyChain.Core {
                     foreach (var kv in child.Enumerate(index + BlockSize, key)) yield return kv;
                 }
 
-                public override bool TryGetValue(byte* key, out TValue value) {
+                public override ref TValue TryGetValue(byte* key) {
                     if (pathRef.SequenceEqual(new ReadOnlySpan<byte>(key, sizeof(TBlock)))) {
-                        return child.TryGetValue(key + sizeof(TBlock), out value);
+                        return ref child.TryGetValue(key + sizeof(TBlock));
                     }
-                    value = default!;
-                    return false;
+                    return ref Unsafe.AsRef<TValue>(null);
                 }
 
                 public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
@@ -870,9 +866,8 @@ namespace OnlyChain.Core {
                     return this;
                 }
 
-                public override bool TryGetValue(byte* key, out TValue value) {
-                    value = this.value;
-                    return true;
+                public override ref TValue TryGetValue(byte* key) {
+                    return ref value;
                 }
 
                 public override IHashNode FindFillHash(ref FindFillHashArgs args, int index) {
@@ -883,7 +878,7 @@ namespace OnlyChain.Core {
                     args.RightBound = false;
                     TKey key;
                     BufferToKey(args.Key, &key);
-                    return new ValueHashNode(key, value);
+                    return new ValueHashNode(Hash, key, value);
                 }
 
                 public override IEnumerable<KeyValuePair<TKey, TValue>> Enumerate(int index, byte[] key) {
@@ -915,10 +910,11 @@ namespace OnlyChain.Core {
             [System.Diagnostics.DebuggerDisplay("Children Count: {Children.Count}")]
             public sealed class TreeHashNode : IHashNode {
                 public HashNodeType Type => HashNodeType.Node;
+                public THash Hash { get; }
                 public IReadOnlyList<IHashNode> Children { get; }
 
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                public TreeHashNode(params IHashNode[] children) => Children = children;
+                public TreeHashNode(THash hash, params IHashNode[] children) => (Hash, Children) = (hash, children);
             }
 
             [System.Diagnostics.DebuggerDisplay("Hash:{Hash}")]
@@ -933,11 +929,12 @@ namespace OnlyChain.Core {
             [System.Diagnostics.DebuggerDisplay("Key:{Key},Value:{Value}")]
             public sealed class ValueHashNode : IHashNode {
                 public HashNodeType Type => HashNodeType.Value;
+                public THash Hash { get; }
                 public TKey Key { get; }
                 public TValue Value { get; }
 
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                public ValueHashNode(TKey key, TValue value) => (Key, Value) = (key, value);
+                public ValueHashNode(THash hash, TKey key, TValue value) => (Hash, Key, Value) = (hash, key, value);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
@@ -958,17 +955,32 @@ namespace OnlyChain.Core {
 
         [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "<挂起>")]
         public interface IHashAlgorithm {
-            THash ComputeHash(TKey key, TValue value);
+            THash ComputeHash(TKey key, in TValue value);
             THash ComputeHash(ReadOnlySpan<THash> hashes);
         }
 
         [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "<挂起>")]
         public interface IHashNode {
             HashNodeType Type { get; }
+            THash Hash { get; }
             IReadOnlyList<IHashNode> Children => throw MerklePatriciaTreeSupport.NotSupportedException;
-            THash Hash => throw MerklePatriciaTreeSupport.NotSupportedException;
             TKey Key => throw MerklePatriciaTreeSupport.NotSupportedException;
             TValue Value => throw MerklePatriciaTreeSupport.NotSupportedException;
+
+            IHashNode Combine(IHashNode other) {
+                if (!EqualityComparer<THash>.Default.Equals(Hash, other.Hash)) throw new InvalidOperationException();
+
+                if (Type is HashNodeType.Node && other.Type is HashNodeType.Node) {
+                    var children = new IHashNode[Children.Count];
+                    for (int i = 0; i < children.Length; i++) {
+                        children[i] = Children[i].Combine(other.Children[i]);
+                    }
+                    return new Support.TreeHashNode(Hash, children);
+                } else if (Type == HashNodeType.Hash) {
+                    return other;
+                }
+                return this;
+            }
         }
     }
 
@@ -979,8 +991,6 @@ namespace OnlyChain.Core {
 
         public THash RootHash => root.Hash;
 
-        public MerklePatriciaTree<TKey, TValue, THash>? Parent { get; }
-
         public int Count { get; private set; }
 
         public bool IsReadOnly { get; private set; } = false;
@@ -989,7 +999,6 @@ namespace OnlyChain.Core {
         public MerklePatriciaTree(int generation) {
             root = new Support.EmptyNode(generation);
             Count = 0;
-            Parent = null;
         }
 
         private MerklePatriciaTree(MerklePatriciaTree<TKey, TValue, THash> parentTree) {
@@ -997,9 +1006,12 @@ namespace OnlyChain.Core {
 
             root = parentTree.root.Clone(parentTree.Generation + 1);
             Count = parentTree.Count;
-            Parent = parentTree;
         }
 
+        /// <summary>
+        /// 克隆当前MPT，代数+1，并且可修改
+        /// </summary>
+        /// <returns></returns>
         public MerklePatriciaTree<TKey, TValue, THash> NextNew() => new MerklePatriciaTree<TKey, TValue, THash>(this);
 
         /// <summary>
@@ -1033,7 +1045,8 @@ namespace OnlyChain.Core {
 
         public TValue this[TKey key] {
             get {
-                if (TryGetValue(key, out var value)) return value;
+                ref readonly TValue value = ref TryGetValue(key);
+                if (Unsafe.AsPointer(ref Unsafe.AsRef(value)) != null) return value;
                 throw new KeyNotFoundException($"键值'{key}'不存在");
             }
             set {
@@ -1098,7 +1111,7 @@ namespace OnlyChain.Core {
         public bool ContainsKey(TKey key) => TryGetValue(key, out _);
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
-            if (arrayIndex + Count < array.Length) throw new ArgumentOutOfRangeException();
+            if (arrayIndex < 0 || Count > array.Length - arrayIndex) throw new ArgumentOutOfRangeException();
             int i = 0;
             foreach (var kv in this) {
                 array[arrayIndex + i++] = kv;
@@ -1192,7 +1205,26 @@ namespace OnlyChain.Core {
 
             var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
             Support.KeyToBuffer(&key, keyBuffer);
-            return root.TryGetValue(keyBuffer, out value);
+            ref TValue refValue = ref root.TryGetValue(keyBuffer);
+            if (Unsafe.AsPointer(ref refValue) == null) {
+                value = default!;
+                return false;
+            }
+            value = refValue;
+            return true;
+        }
+
+        /// <summary>
+        /// 当Key不存在时返回空引用，否则返回对应的Value。
+        /// </summary>
+        /// <param name="key"></param>
+        /// <returns></returns>
+        public ref readonly TValue TryGetValue(TKey key) {
+            if (Count == 0) return ref Unsafe.AsRef<TValue>(null);
+
+            var keyBuffer = stackalloc byte[sizeof(TKey) * 2];
+            Support.KeyToBuffer(&key, keyBuffer);
+            return ref root.TryGetValue(keyBuffer);
         }
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -1221,7 +1253,7 @@ namespace OnlyChain.Core {
             }
 
             public void CopyTo(TKey[] array, int arrayIndex) {
-                if (arrayIndex < 0 || arrayIndex + Count > array.Length) throw new ArgumentOutOfRangeException();
+                if (arrayIndex < 0 || Count > array.Length - arrayIndex) throw new ArgumentOutOfRangeException();
                 int i = 0;
                 foreach (var key in this) {
                     array[arrayIndex + i++] = key;
@@ -1259,10 +1291,10 @@ namespace OnlyChain.Core {
             public bool Contains(TValue item) => source.Select(kv => kv.Value).Contains(item);
 
             public void CopyTo(TValue[] array, int arrayIndex) {
-                if (arrayIndex < 0 || arrayIndex + Count > array.Length) throw new ArgumentOutOfRangeException();
+                if (arrayIndex < 0 || Count > array.Length - arrayIndex) throw new ArgumentOutOfRangeException();
                 int i = 0;
-                foreach (var key in this) {
-                    array[arrayIndex + i++] = key;
+                foreach (var value in this) {
+                    array[arrayIndex + i++] = value;
                 }
             }
 

@@ -8,8 +8,8 @@ namespace OnlyChain.Network.Objects {
 	public abstract class BValue<T> : BObject {
 		public readonly T Value;
 
-		public BValue(T value) => Value = value;
-		public BValue(in T value) => Value = value;
+		protected BValue(T value) => Value = value;
+		protected BValue(in T value) => Value = value;
 
 		public override int GetHashCode() => Value.GetHashCode();
 
@@ -20,5 +20,7 @@ namespace OnlyChain.Network.Objects {
 		public override string ToString() => Value.ToString();
 
 		public static implicit operator T(BValue<T> @this) => @this.Value;
+
+		public void Deconstruct(out T result) => result = Value;
 	}
 }

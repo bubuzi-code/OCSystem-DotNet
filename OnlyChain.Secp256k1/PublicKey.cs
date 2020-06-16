@@ -12,22 +12,27 @@ namespace OnlyChain.Secp256k1 {
 
         internal U256 x, y;
 
-        internal PublicKey(in U256 x, in U256 y) => (this.x, this.y) = (x, y);
+        public U256 X => x;
+        public U256 Y => y;
+
+        public PublicKey(in U256 x, in U256 y) => (this.x, this.y) = (x, y);
 
         public void GetX(Span<byte> buffer) => x.CopyTo(buffer, true);
         public byte[] GetX() => x.ToArray(true);
         public void GetY(Span<byte> buffer) => y.CopyTo(buffer, true);
         public byte[] GetY() => y.ToArray(true);
 
-        public void Serialize(Span<byte> buf, bool compressed = false) {
+        public int Serialize(Span<byte> buf, bool compressed = false) {
             int len = compressed ? 33 : 65;
             if (buf.Length < len) throw new ArgumentOutOfRangeException(nameof(buf));
             x.CopyTo(buf.Slice(1, 32), true);
             if (!compressed) {
                 y.CopyTo(buf.Slice(33, 32), true);
                 buf[0] = FullPublicKey;
+                return 65;
             } else {
                 buf[0] = y.v0 % 2 == 0 ? EvenPublicKey : OddPublicKey;
+                return 33;
             }
         }
 
@@ -37,7 +42,7 @@ namespace OnlyChain.Secp256k1 {
             return result;
         }
 
-        public static PublicKey Parse(ReadOnlySpan<byte> bytes) {
+        public static PublicKey Parse(ReadOnlySpan<byte> bytes, out int readBytes) {
             if (bytes.Length < 33) throw new InvalidPublicKeyException("长度太小");
             U256 x = new U256(bytes.Slice(1, 32), bigEndian: true), y;
             if (x >= ModP.P) throw new InvalidPublicKeyException();
@@ -49,6 +54,7 @@ namespace OnlyChain.Secp256k1 {
                         // y.v0 % 2 != 0 && bytes[0] == EvenPublicKey
                         y = ModP.Neg(y);
                     }
+                    readBytes = 33;
                     return new PublicKey(x, y);
                 } catch (ArgumentException) {
                     throw new InvalidPublicKeyException();
@@ -59,11 +65,14 @@ namespace OnlyChain.Secp256k1 {
                 if (ModP.Add(ModP.Pow(x, 3), ModP.Seven) != ModP.Square(y)) {
                     throw new InvalidPublicKeyException();
                 }
+                readBytes = 65;
                 return new PublicKey(x, y);
             } else {
                 throw new InvalidPublicKeyException("不支持的公钥类型");
             }
         }
+
+        public static PublicKey Parse(ReadOnlySpan<byte> bytes) => Parse(bytes, out _);
 
         internal Point ToPoint() => new Point(x, y);
     }

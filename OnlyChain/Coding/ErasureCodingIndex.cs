@@ -5,16 +5,16 @@ namespace OnlyChain.Coding {
     [StructLayout(LayoutKind.Sequential)]
     public readonly struct ErasureCodingIndex {
         public readonly int DataMissIndex;
-        public readonly int ErrorIndex;
+        public readonly int ErasureCodeIndex;
 
-        public ErasureCodingIndex(int dataMissIndex, int errorIndex) => (DataMissIndex, ErrorIndex) = (dataMissIndex, errorIndex);
+        public ErasureCodingIndex(int dataMissIndex, int erasureCodeIndex) => (DataMissIndex, ErasureCodeIndex) = (dataMissIndex, erasureCodeIndex);
 
-        public void Deconstruct(out int dataMissIndex, out int errorIndex) {
+        public void Deconstruct(out int dataMissIndex, out int erasureCodeIndex) {
             dataMissIndex = DataMissIndex;
-            errorIndex = ErrorIndex;
+            erasureCodeIndex = ErasureCodeIndex;
         }
 
-        public static implicit operator ErasureCodingIndex((int DataMissIndex, int ErrorIndex) pair)
-            => new ErasureCodingIndex(pair.DataMissIndex, pair.ErrorIndex);
+        public static implicit operator ErasureCodingIndex((int DataMissIndex, int ErasureCodeIndex) pair)
+            => new ErasureCodingIndex(pair.DataMissIndex, pair.ErasureCodeIndex);
     }
 }

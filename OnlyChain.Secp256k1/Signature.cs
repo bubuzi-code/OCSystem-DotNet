@@ -12,7 +12,7 @@ namespace OnlyChain.Secp256k1 {
         public void GetS(Span<byte> buffer) => S.CopyTo(buffer, bigEndian: true);
         public byte[] GetS() => S.ToArray(bigEndian: true);
 
-        internal Signature(in U256 r, in U256 s) => (R, S) = (r, s);
+        public Signature(in U256 r, in U256 s) => (R, S) = (r, s);
 
         static int ParseInt(ReadOnlySpan<byte> bytes, ref int index) {
             if (index >= bytes.Length) throw new InvalidSignatureException();

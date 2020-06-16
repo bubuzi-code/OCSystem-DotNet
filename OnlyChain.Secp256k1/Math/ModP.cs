@@ -258,42 +258,21 @@ namespace OnlyChain.Secp256k1.Math {
             }
         }
 
-        static void Mul(ref Point ret, ref Point temp, ulong n, int bits) {
-            for (int i = 0; i < bits - 1; i++) {
-                if ((n & (1UL << i)) != 0) ret = Add(ret, temp);
-                temp = Mul2(temp);
-            }
-            if ((n & (1UL << (bits - 1))) != 0) ret = Add(ret, temp);
-        }
 
-        static void Mul(ref Point ret, ref Point temp, ulong n) {
-            for (int i = 0; i < 64; i++) {
-                if ((n & (1UL << i)) != 0) ret = Add(ret, temp);
-                temp = Mul2(temp);
-            }
-        }
-
-
-
-        public static Point Mul(in Point p, in U256 n) {
+        unsafe public static Point Mul(in Point p, U256 n) {
             if (p.IsZero || n.IsZero) return Point.Zero;
-            
+
             Point ret = Point.Zero, temp = p;
-            if (n.v3 != 0) {
-                Mul(ref ret, ref temp, n.v0);
-                Mul(ref ret, ref temp, n.v1);
-                Mul(ref ret, ref temp, n.v2);
-                Mul(ref ret, ref temp, n.v3, 64 - BitOperations.LeadingZeroCount(n.v3));
-            } else if (n.v2 != 0) {
-                Mul(ref ret, ref temp, n.v0);
-                Mul(ref ret, ref temp, n.v1);
-                Mul(ref ret, ref temp, n.v2, 64 - BitOperations.LeadingZeroCount(n.v2));
-            } else if (n.v1 != 0) {
-                Mul(ref ret, ref temp, n.v0);
-                Mul(ref ret, ref temp, n.v1, 64 - BitOperations.LeadingZeroCount(n.v1));
-            } else if (n.v0 != 0) {
-                Mul(ref ret, ref temp, n.v0, 64 - BitOperations.LeadingZeroCount(n.v0));
+            for (int i = 0; i < 4; i++) {
+                ulong v = ((ulong*)&n)[i];
+                for (int j = 0; j < 64; j++) {
+                    if ((v & (1UL << j)) != 0) {
+                        ret = Add(ret, temp);
+                    }
+                    temp = Mul2(temp);
+                }
             }
+            new Span<byte>(&n, sizeof(U256)).Clear();
             return ret;
         }
 
@@ -343,15 +322,15 @@ namespace OnlyChain.Secp256k1.Math {
             }
         }
 
-        unsafe public static Point MulG(in U256 n) {
+        unsafe public static Point MulG(U256 n) {
             Point ret = Point.Zero;
-            fixed (U256* p = &n) {
-                for (int j = 0; j < 32; j++) {
-                    var i = ((byte*)p)[j];
-                    if (i == 0) continue;
+            for (int j = 0; j < 32; j++) {
+                var i = ((byte*)&n)[j];
+                if (i != 0) {
                     ret = FastAdd(ret, Gx_Table[j, i], Gy_Table[j, i]);
                 }
             }
+            new Span<byte>(&n, sizeof(U256)).Clear();
             return ret;
         }
     }

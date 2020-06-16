@@ -14,6 +14,7 @@ using System.Buffers.Binary;
 using System.Threading.Channels;
 using System.Threading;
 using System.Linq;
+using System.Collections.Concurrent;
 
 namespace OnlyChain.Network {
     [System.Diagnostics.DebuggerDisplay("{Address}, port: {Port}")]
@@ -27,32 +28,34 @@ namespace OnlyChain.Network {
         private readonly CancellationTokenSource closeCancelTokenSource = new CancellationTokenSource();
         private readonly Dictionary<Address, DateTime> broadcastIdRecord = new Dictionary<Address, DateTime>();
         private readonly UdpServer udpServer;
-        private readonly KBucket kbucket;
+        private readonly TcpServer tcpServer;
 
         public string? NetworkPrefix { get; }
         public Address Address { get; }
-        public int Port => udpServer.UdpPort;
-        public KBucket Nodes => kbucket;
+        public IPEndPoint UdpEndPoint => udpServer.IPEndPoint;
+        public IPEndPoint TcpEndPoint => tcpServer.IPEndPoint;
+        public KBucket Nodes { get; }
         public CancellationToken CloseCancellationToken => closeCancelTokenSource.Token;
-
+        public BlockChainSystem System { get; }
 
         public event EventHandler<BroadcastEventArgs> ReceiveBroadcast = null!;
+        public event EventHandler<GetValueEventArgs> ResponseGetValue = null!;
 
-        public Client(Address address, int udpPort, string? networkPrefix = null, IPAddress? bindIP = null, IEnumerable<IPEndPoint>? seeds = null) {
+        public Client(Address address, IPAddress bindIPAddress, int udpPort, int tcpPort, string? networkPrefix = null, IEnumerable<IPEndPoint>? seeds = null) {
             Address = address;
             NetworkPrefix = networkPrefix;
+            System = new BlockChainSystem(this, networkPrefix ?? "main");
 
-            udpServer = new UdpServer(this, udpPort, bindIP);
-            kbucket = new KBucket(16, address, Ping);
+            udpServer = new UdpServer(this, new IPEndPoint(bindIPAddress, udpPort));
+            tcpServer = new TcpServer(this, new IPEndPoint(bindIPAddress, tcpPort));
+            Nodes = new KBucket(16, address, Ping);
 
             refreshKBucketTimeSpan = TimeSpan.FromSeconds(random.NextDouble() * 1 + 7);
             refreshKBucketTimer = new Timer(async delegate {
-                var sw = new System.Diagnostics.Stopwatch();
-                sw.Restart();
                 if (closeCancelTokenSource.IsCancellationRequested) return;
                 var randomAddress = Address.Random();
-                var neighborNodes = kbucket.FindNode(randomAddress, 10);
-                var tasks = Array.ConvertAll(neighborNodes, node => FindNode(randomAddress, kbucket.K, node.IPEndPoint, hasRemoteNode: false, refreshKBucket: true));
+                var neighborNodes = Nodes.FindNode(randomAddress, 10);
+                var tasks = Array.ConvertAll(neighborNodes, node => FindNode(randomAddress, Nodes.K, node.IPEndPoint, hasRemoteNode: false, refreshKBucket: true));
 
                 var now = DateTime.Now;
                 lock (broadcastIdRecord) {
@@ -66,13 +69,7 @@ namespace OnlyChain.Network {
                     }
                 }
 
-                foreach (var t in tasks) {
-                    try { await t; } catch { }
-                }
-                sw.Stop();
-                if (Address == "dbaaf68ee499766bdc548e324cdd204e3a563f2c") {
-                    Console.WriteLine(sw.Elapsed);
-                }
+                await tasks.WhenAll();
             }, null, refreshKBucketTimeSpan, refreshKBucketTimeSpan);
 
 
@@ -98,23 +95,19 @@ namespace OnlyChain.Network {
                     foreach (var node in lookupNodes) {
                         findTasks.Add(Find(node.IPEndPoint, false));
                     }
-                    foreach (var t in findTasks) {
-                        try { await t.ConfigureAwait(true); } catch { }
-                    }
+                    await findTasks.WhenAll();
                 }
 
                 async void RandomSearch() {
                     try {
                         for (int i = 0; i < 5; i++) {
                             var randomAddress = Address.Random();
-                            var nodes = kbucket.FindNode(randomAddress, findCount);
+                            var nodes = Nodes.FindNode(randomAddress, findCount);
                             var tasks = new Task[nodes.Length];
                             for (int j = 0; j < nodes.Length; j++) {
                                 tasks[j] = FindNode(randomAddress, findCount, nodes[j].IPEndPoint, hasRemoteNode: false, refreshKBucket: true);
                             }
-                            foreach (var t in tasks) {
-                                try { await t; } catch { }
-                            }
+                            await tasks.WhenAll();
                         }
                     } catch { }
                 }
@@ -131,7 +124,7 @@ namespace OnlyChain.Network {
 
         [CommandHandler("ping")]
         private BDict? PingHandle(RemoteRequest r) {
-            if (r.Request["ping"] is BAddress { Value: var myAddress } && myAddress == Address) {
+            if (r.Request["ping"] is BAddress(Address myAddress) && myAddress == Address) {
                 return new BDict { ["pong"] = r.Address };
             }
             return null;
@@ -139,20 +132,49 @@ namespace OnlyChain.Network {
 
         [CommandHandler("find_node")]
         private BDict? FindNodeHandle(RemoteRequest r) {
-            int findCount = kbucket.K;
-            if (!(r.Request["target"] is BAddress { Value: var target })) return null;
-            if (r.Request["count"] is BUInt { Value: var count } && count > 0 && count < 50) findCount = (int)count;
+            int findCount = Nodes.K;
+            if (!(r.Request["target"] is BAddress(Address target))) return null;
+            if (r.Request["count"] is BUInt(ulong count) && count > 0 && count < 50) findCount = (int)count;
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(findCount * 39);
             try {
                 int len = 0;
-                foreach (var node in kbucket.FindNode(target, findCount)) {
+                foreach (var node in Nodes.FindNode(target, findCount)) {
                     len += WriteNode(buffer.AsSpan(len), node);
                 }
                 return new BDict { ["nodes"] = buffer[0..len] };
             } finally {
                 ArrayPool<byte>.Shared.Return(buffer);
-                _ = kbucket.Add(new Node(r.Address, r.Remote), lookup: false);
+                _ = Nodes.Add(new Node(r.Address, r.Remote), lookup: false);
+            }
+        }
+
+        [CommandHandler("get")]
+        private BDict? GetHandle(RemoteRequest r) {
+            if (ResponseGetValue is null) return null;
+
+            int findCount = Nodes.K;
+            if (!(r.Request["key"] is BBuffer(byte[] key))) return null;
+            if (r.Request["count"] is BUInt(ulong count) && count > 0 && count < 50) findCount = (int)count;
+
+            var eventArgs = new GetValueEventArgs(new Node(r.Address, r.Remote), key);
+            ResponseGetValue(this, eventArgs);
+
+            if (!eventArgs.HasValue) {
+                Address target = HashTools.KeyToAddress(key);
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(findCount * 39);
+                try {
+                    int len = 0;
+                    foreach (var node in Nodes.FindNode(target, findCount)) {
+                        len += WriteNode(buffer.AsSpan(len), node);
+                    }
+                    return new BDict { ["nodes"] = buffer[0..len] };
+                } finally {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    _ = Nodes.Add(new Node(r.Address, r.Remote), lookup: false);
+                }
+            } else {
+                return new BDict { ["port"] = tcpServer.IPEndPoint.Port };
             }
         }
 
@@ -160,22 +182,30 @@ namespace OnlyChain.Network {
         private async Task BroadcastHandle(RemoteRequest r) {
             if (ReceiveBroadcast is null) return;
 
-            if (!(r.Request["id"] is BAddress { Value: var id })) return;
-            if (!(r.Request["i"] is BUInt { Value: var ttl }) || ttl >= int.MaxValue) return;
-            if (!(r.Request["msg"] is BBuffer { Buffer: byte[] message })) return;
+            if (!(r.Request["id"] is BAddress(Address id))) return;
+            if (!(r.Request["i"] is BUInt(ulong ttl)) || ttl >= int.MaxValue) return;
+            if (!(r.Request["msg"] is BBuffer(byte[] message))) return;
 
             lock (broadcastIdRecord) {
                 if (!broadcastIdRecord.TryAdd(id, DateTime.Now)) return;
-                if (broadcastIdRecord.Count > 1000_0000) {
+                if (broadcastIdRecord.Count > 1000) {
                     broadcastIdRecord.Remove(broadcastIdRecord.Keys.First());
                 }
             }
 
-            await Task.Yield(); // 处理广播消息可能要花很多时间
-
-            var broadcast = new BroadcastEventArgs(new Node(r.Address, r.Remote), (int)ttl, message);
-            ReceiveBroadcast(this, broadcast);
-            if (broadcast.IsCancelForward) return;
+            var eventArgs = new BroadcastEventArgs(new Node(r.Address, r.Remote), (int)ttl, message);
+            var handlers = (EventHandler<BroadcastEventArgs>[])ReceiveBroadcast.GetInvocationList();
+            foreach (var handler in handlers) {
+                try {
+                    eventArgs.Task = null;
+                    handler(this, eventArgs);
+                    if (eventArgs.IsCancelForward) return;
+                    if (eventArgs.Task is { }) {
+                        await eventArgs.Task;
+                    }
+                    if (eventArgs.IsCancelForward) return;
+                } catch { }
+            }
 
             Broadcast(message, id, (int)ttl + 1);
         }
@@ -185,7 +215,7 @@ namespace OnlyChain.Network {
 
             var surviveTimeSpan = DateTime.Now - node.RefreshTime;
             if (surviveTimeSpan < TimeSpan.Zero) surviveTimeSpan = TimeSpan.Zero; else if (surviveTimeSpan > KBucket.Timeout) surviveTimeSpan = KBucket.Timeout;
-            var surviveSeconds = surviveTimeSpan.TotalSeconds + (1 << 51) - (1 << 51); // 根据IEEE 754，此操作可以实现四舍五入并保留1bit小数
+            var surviveSeconds = surviveTimeSpan.TotalSeconds + (1L << 51) - (1L << 51); // 根据IEEE 754，此操作可以实现四舍五入并保留1bit小数
             byte surviveTime = (byte)(surviveSeconds * 2);
 
             IPAddress ip = node.IPEndPoint.Address;
@@ -220,7 +250,7 @@ namespace OnlyChain.Network {
             try {
                 var r = await udpServer.Request(new BDict { ["c"] = "ping", ["ping"] = node.Address }, node.IPEndPoint, cancellationToken: closeCancelTokenSource.Token);
                 if (r.Address != node.Address) return false;
-                if (!(r.Response["pong"] is BAddress { Value: var myAddress }) || myAddress != Address) return false;
+                if (!(r.Response["pong"] is BAddress(Address myAddress)) || myAddress != Address) return false;
                 return true;
             } catch {
                 return false;
@@ -230,7 +260,7 @@ namespace OnlyChain.Network {
         private async Task<Node[]> FindNode(Address target, int findCount, IPEndPoint remoteEP, bool hasRemoteNode, bool refreshKBucket = false, CancellationToken cancellationToken = default) {
             var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, closeCancelTokenSource.Token);
             var r = await udpServer.Request(new BDict { ["c"] = "find_node", ["target"] = target, ["count"] = (ulong)findCount }, remoteEP, cancellationToken: tokenSource.Token);
-            if (!(r.Response["nodes"] is BBuffer { Buffer: byte[] buffer })) return Array.Empty<Node>();
+            if (!(r.Response["nodes"] is BBuffer(byte[] buffer))) return Array.Empty<Node>();
             var nodes = new Dictionary<Address, Node>();
             for (int i = 0; i < buffer.Length;) {
                 i += ReadNode(buffer.AsSpan(i), out var node);
@@ -243,13 +273,41 @@ namespace OnlyChain.Network {
             if (refreshKBucket) {
                 var tasks = new List<Task>();
                 foreach (var node in nodes.Values) {
-                    var task = kbucket.Add(node, lookup: true);
+                    var task = Nodes.Add(node, lookup: true);
                     if (!task.IsCompleted) tasks.Add(task.AsTask());
                 }
-                foreach (var task in tasks) await task;
+                await Task.WhenAll(tasks);
             }
 
             return nodes.Values.ToArray();
+        }
+
+        /// <summary>
+        /// 返回Node表示找到值，返回Node[]表示未找到值
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="findCount"></param>
+        /// <param name="remoteEP"></param>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        private async Task<object> Get(byte[] key, int findCount, IPEndPoint remoteEP, CancellationToken cancellationToken = default) {
+            var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, closeCancelTokenSource.Token);
+            var r = await udpServer.Request(new BDict { ["c"] = "get", ["key"] = key, ["count"] = (ulong)findCount }, remoteEP, cancellationToken: tokenSource.Token);
+
+            if (r.Response["port"] is BInt(long port) && port > 0 && port < ushort.MaxValue) {
+                return new Node(r.Address, new IPEndPoint(r.Remote.Address, (int)port));
+            }
+
+            if (r.Response["nodes"] is BBuffer(byte[] buffer)) {
+                var nodes = new Dictionary<Address, Node>();
+                for (int i = 0; i < buffer.Length;) {
+                    i += ReadNode(buffer.AsSpan(i), out var node);
+                    if (!nodes.ContainsKey(node.Address)) nodes.Add(node.Address, node);
+                }
+
+                return nodes.Values.ToArray();
+            }
+            return Array.Empty<Node>();
         }
 
         private void Broadcast(byte[] message, Hash<Size160> broadcastId, int ttl = 0) {
@@ -257,31 +315,31 @@ namespace OnlyChain.Network {
 
             var dict = new BDict { ["c"] = "broadcast", ["a"] = Address, ["msg"] = message, ["id"] = (Address)broadcastId, ["i"] = (ulong)ttl };
             var data = Bencode.Encode(dict, NetworkPrefix);
-            var broadcastNodes = kbucket.FindNode(Address, kbucket.K, randomCount: 2);
+            var broadcastNodes = Nodes.FindNode(Address, Nodes.K, randomCount: 2);
             foreach (var node in broadcastNodes) {
                 udpServer.Send(data, node.IPEndPoint);
             }
         }
 
         /// <summary>
-        /// 在全网中查找目标地址的IP端口
+        /// 在全网中查找目标地址的IP和端口
         /// </summary>
         /// <param name="target"></param>
         /// <param name="nodePoolSize"></param>
         /// <returns></returns>
-        public async ValueTask<Node?> Lookup(Address target, int nodePoolSize = 20) {
-            var cancellationTokenSource = new CancellationTokenSource();
-            var addresses = new SortedSet<Address>(Comparer<Address>.Create((a, b) => (a ^ target).CompareTo(b ^ target)));
+        public async ValueTask<Node?> Lookup(Address target, int nodePoolSize = 20, CancellationToken cancellationToken = default) {
+            var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var addresses = new SortedSet<Address>(target.Comparer);
             var result = new TaskCompletionSource<Node?>();
 
             async Task Find(IPEndPoint remote, bool hasRemoteNode) {
-                var nodes = await FindNode(target, kbucket.K, remote, hasRemoteNode, refreshKBucket: false, cancellationTokenSource.Token);
+                var nodes = await FindNode(target, Nodes.K, remote, hasRemoteNode, refreshKBucket: false, cancellationTokenSource.Token);
                 var lookupNodes = new List<Node>();
                 foreach (var node in nodes) {
                     if (cancellationTokenSource.IsCancellationRequested) return;
                     if (node.Address == target) {
-                        result.TrySetResult(node);
                         cancellationTokenSource.Cancel();
+                        result.TrySetResult(node);
                         return;
                     }
                     lock (addresses) {
@@ -291,20 +349,44 @@ namespace OnlyChain.Network {
                         lookupNodes.Add(node);
                     }
                 }
-                var findTasks = Array.ConvertAll(lookupNodes.ToArray(), node => Find(node.IPEndPoint, false));
-                foreach (var t in findTasks) {
-                    try { await t; } catch { }
+                await lookupNodes.Select(node => Find(node.IPEndPoint, false)).WhenAll();
+            }
+
+            var tempNodes = Nodes.FindNode(target, Nodes.K);
+            if (tempNodes.FirstOrDefault(n => n.Address == target) is Node r) return r;
+            await Array.ConvertAll(tempNodes, node => Find(node.IPEndPoint, true)).WhenAll();
+            result.TrySetResult(null);
+            return await result.Task;
+        }
+
+        public ChannelReader<Node> Get(byte[] key, int nodePoolSize = 20, CancellationToken cancellationToken = default) {
+            Address target = HashTools.KeyToAddress(key);
+            var addresses = new SortedSet<Address>(target.Comparer);
+            var result = Channel.CreateBounded<Node>(1);
+
+            async Task Find(Node remoteNode) {
+                if (cancellationToken.IsCancellationRequested) return;
+
+                lock (addresses) {
+                    if (addresses.Count == nodePoolSize && (remoteNode.Address ^ target) >= (addresses.Max ^ target)) return;
+                    if (!addresses.Add(remoteNode.Address)) return;
+                    if (addresses.Count > nodePoolSize) addresses.Remove(addresses.Max);
+                }
+
+                var r = await Get(key, Nodes.K, remoteNode.IPEndPoint, cancellationToken);
+                switch (r) {
+                    case Node[] nodes:
+                        await Array.ConvertAll(nodes, node => Find(node)).WhenAll();
+                        break;
+                    case Node node:
+                        await result.Writer.WriteAsync(node, cancellationToken);
+                        break;
                 }
             }
 
-            var tempNodes = kbucket.FindNode(target, kbucket.K);
-            if (tempNodes.FirstOrDefault(n => n.Address == target) is Node r) return r;
-            var tasks = Array.ConvertAll(tempNodes, node => Find(node.IPEndPoint, true));
-            foreach (var t in tasks) {
-                try { await t; } catch { }
-            }
-            result.TrySetResult(null);
-            return await result.Task;
+            var tempNodes = Nodes.FindNode(target, Nodes.K);
+            _ = Array.ConvertAll(tempNodes, node => Find(node)).WhenAll().ContinueWith(delegate { result.Writer.TryComplete(); });
+            return result;
         }
 
 
@@ -315,6 +397,10 @@ namespace OnlyChain.Network {
             }
             Broadcast(message, broadcastId);
         }
+
+
+
+
 
         public bool IsDisposed { get; private set; } = false;
 

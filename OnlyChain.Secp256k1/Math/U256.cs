@@ -8,8 +8,8 @@ namespace OnlyChain.Secp256k1.Math {
     /// <summary>
     /// 256位无符号整型
     /// </summary>
-    unsafe public struct U256 {
-        public ulong v0, v1, v2, v3;
+    unsafe public readonly struct U256 {
+        public readonly ulong v0, v1, v2, v3;
 
         public static readonly U256 Zero = new U256();
         public static readonly U256 One = new U256(1);
@@ -39,6 +39,7 @@ namespace OnlyChain.Secp256k1.Math {
             v3 = 0;
         }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0057:使用范围运算符", Justification = "<挂起>")]
         public U256(ReadOnlySpan<char> hexString) {
             switch ((hexString.Length + 15) >> 4) {
                 case 0:
@@ -93,47 +94,46 @@ namespace OnlyChain.Secp256k1.Math {
         public override int GetHashCode()
             => v0.GetHashCode() ^ v1.GetHashCode() ^ v2.GetHashCode() ^ v3.GetHashCode();
 
-        static readonly char[] HexTemplate = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+        static ReadOnlySpan<byte> HexTemplate => new[] { (byte)'0', (byte)'1', (byte)'2', (byte)'3', (byte)'4', (byte)'5', (byte)'6', (byte)'7', (byte)'8', (byte)'9', (byte)'a', (byte)'b', (byte)'c', (byte)'d', (byte)'e', (byte)'f' };
 
         public override string ToString() {
             static void WriteHex(char* buffer, ulong v) {
-                ReadOnlySpan<char> table = HexTemplate;
-                ref char t = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(table);
+                ref byte t = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(HexTemplate);
                 byte* p = (byte*)&v;
                 if (BitConverter.IsLittleEndian) {
-                    buffer[2 * 7 + 0] = Unsafe.Add(ref t, p[0] >> 4);
-                    buffer[2 * 7 + 1] = Unsafe.Add(ref t, p[0] & 15);
-                    buffer[2 * 6 + 0] = Unsafe.Add(ref t, p[1] >> 4);
-                    buffer[2 * 6 + 1] = Unsafe.Add(ref t, p[1] & 15);
-                    buffer[2 * 5 + 0] = Unsafe.Add(ref t, p[2] >> 4);
-                    buffer[2 * 5 + 1] = Unsafe.Add(ref t, p[2] & 15);
-                    buffer[2 * 4 + 0] = Unsafe.Add(ref t, p[3] >> 4);
-                    buffer[2 * 4 + 1] = Unsafe.Add(ref t, p[3] & 15);
-                    buffer[2 * 3 + 0] = Unsafe.Add(ref t, p[4] >> 4);
-                    buffer[2 * 3 + 1] = Unsafe.Add(ref t, p[4] & 15);
-                    buffer[2 * 2 + 0] = Unsafe.Add(ref t, p[5] >> 4);
-                    buffer[2 * 2 + 1] = Unsafe.Add(ref t, p[5] & 15);
-                    buffer[2 * 1 + 0] = Unsafe.Add(ref t, p[6] >> 4);
-                    buffer[2 * 1 + 1] = Unsafe.Add(ref t, p[6] & 15);
-                    buffer[2 * 0 + 0] = Unsafe.Add(ref t, p[7] >> 4);
-                    buffer[2 * 0 + 1] = Unsafe.Add(ref t, p[7] & 15);
+                    buffer[2 * 7 + 0] = (char)Unsafe.Add(ref t, p[0] >> 4);
+                    buffer[2 * 7 + 1] = (char)Unsafe.Add(ref t, p[0] & 15);
+                    buffer[2 * 6 + 0] = (char)Unsafe.Add(ref t, p[1] >> 4);
+                    buffer[2 * 6 + 1] = (char)Unsafe.Add(ref t, p[1] & 15);
+                    buffer[2 * 5 + 0] = (char)Unsafe.Add(ref t, p[2] >> 4);
+                    buffer[2 * 5 + 1] = (char)Unsafe.Add(ref t, p[2] & 15);
+                    buffer[2 * 4 + 0] = (char)Unsafe.Add(ref t, p[3] >> 4);
+                    buffer[2 * 4 + 1] = (char)Unsafe.Add(ref t, p[3] & 15);
+                    buffer[2 * 3 + 0] = (char)Unsafe.Add(ref t, p[4] >> 4);
+                    buffer[2 * 3 + 1] = (char)Unsafe.Add(ref t, p[4] & 15);
+                    buffer[2 * 2 + 0] = (char)Unsafe.Add(ref t, p[5] >> 4);
+                    buffer[2 * 2 + 1] = (char)Unsafe.Add(ref t, p[5] & 15);
+                    buffer[2 * 1 + 0] = (char)Unsafe.Add(ref t, p[6] >> 4);
+                    buffer[2 * 1 + 1] = (char)Unsafe.Add(ref t, p[6] & 15);
+                    buffer[2 * 0 + 0] = (char)Unsafe.Add(ref t, p[7] >> 4);
+                    buffer[2 * 0 + 1] = (char)Unsafe.Add(ref t, p[7] & 15);
                 } else {
-                    buffer[2 * 0 + 0] = Unsafe.Add(ref t, p[0] >> 4);
-                    buffer[2 * 0 + 1] = Unsafe.Add(ref t, p[0] & 15);
-                    buffer[2 * 1 + 0] = Unsafe.Add(ref t, p[1] >> 4);
-                    buffer[2 * 1 + 1] = Unsafe.Add(ref t, p[1] & 15);
-                    buffer[2 * 2 + 0] = Unsafe.Add(ref t, p[2] >> 4);
-                    buffer[2 * 2 + 1] = Unsafe.Add(ref t, p[2] & 15);
-                    buffer[2 * 3 + 0] = Unsafe.Add(ref t, p[3] >> 4);
-                    buffer[2 * 3 + 1] = Unsafe.Add(ref t, p[3] & 15);
-                    buffer[2 * 4 + 0] = Unsafe.Add(ref t, p[4] >> 4);
-                    buffer[2 * 4 + 1] = Unsafe.Add(ref t, p[4] & 15);
-                    buffer[2 * 5 + 0] = Unsafe.Add(ref t, p[5] >> 4);
-                    buffer[2 * 5 + 1] = Unsafe.Add(ref t, p[5] & 15);
-                    buffer[2 * 6 + 0] = Unsafe.Add(ref t, p[6] >> 4);
-                    buffer[2 * 6 + 1] = Unsafe.Add(ref t, p[6] & 15);
-                    buffer[2 * 7 + 0] = Unsafe.Add(ref t, p[7] >> 4);
-                    buffer[2 * 7 + 1] = Unsafe.Add(ref t, p[7] & 15);
+                    buffer[2 * 0 + 0] = (char)Unsafe.Add(ref t, p[0] >> 4);
+                    buffer[2 * 0 + 1] = (char)Unsafe.Add(ref t, p[0] & 15);
+                    buffer[2 * 1 + 0] = (char)Unsafe.Add(ref t, p[1] >> 4);
+                    buffer[2 * 1 + 1] = (char)Unsafe.Add(ref t, p[1] & 15);
+                    buffer[2 * 2 + 0] = (char)Unsafe.Add(ref t, p[2] >> 4);
+                    buffer[2 * 2 + 1] = (char)Unsafe.Add(ref t, p[2] & 15);
+                    buffer[2 * 3 + 0] = (char)Unsafe.Add(ref t, p[3] >> 4);
+                    buffer[2 * 3 + 1] = (char)Unsafe.Add(ref t, p[3] & 15);
+                    buffer[2 * 4 + 0] = (char)Unsafe.Add(ref t, p[4] >> 4);
+                    buffer[2 * 4 + 1] = (char)Unsafe.Add(ref t, p[4] & 15);
+                    buffer[2 * 5 + 0] = (char)Unsafe.Add(ref t, p[5] >> 4);
+                    buffer[2 * 5 + 1] = (char)Unsafe.Add(ref t, p[5] & 15);
+                    buffer[2 * 6 + 0] = (char)Unsafe.Add(ref t, p[6] >> 4);
+                    buffer[2 * 6 + 1] = (char)Unsafe.Add(ref t, p[6] & 15);
+                    buffer[2 * 7 + 0] = (char)Unsafe.Add(ref t, p[7] >> 4);
+                    buffer[2 * 7 + 1] = (char)Unsafe.Add(ref t, p[7] & 15);
                 }
             }
 

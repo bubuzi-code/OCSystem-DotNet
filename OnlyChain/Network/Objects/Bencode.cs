@@ -18,7 +18,7 @@ namespace OnlyChain.Network.Objects {
         }
 
         public static void Encode(Stream stream, BObject obj, string prefix = null) {
-            if (prefix != null) {
+            if (prefix is { }) {
                 stream.Write(Encoding.UTF8.GetBytes(prefix));
             }
             stream.WriteByte(0);

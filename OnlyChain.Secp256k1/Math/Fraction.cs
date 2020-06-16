@@ -4,8 +4,8 @@ using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace OnlyChain.Secp256k1.Math {
-	internal struct Fraction {
-		public U256 Num, Den;
+	internal readonly struct Fraction {
+		public readonly U256 Num, Den;
 
 		public static readonly Fraction Zero = new Fraction(U256.Zero);
 		public static readonly Fraction One = new Fraction(U256.One);

@@ -17,7 +17,10 @@ namespace OnlyChain.Network.Objects {
 
         public BDict(IDictionary<string, BObject> dict) => this.dict = dict;
 
-        public BObject this[string key] { get => dict.TryGetValue(key, out var value) ? value : null; set => dict[key] = value; }
+        public BObject this[string key] {
+            get => dict.TryGetValue(key, out var value) ? value : null;
+            set => dict[key] = value;
+        }
 
         public ICollection<string> Keys => dict.Keys;
 

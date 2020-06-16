@@ -63,7 +63,7 @@ namespace OnlyChain.Database {
         public LevelDBCache? Cache {
             set {
                 cache = value;
-                if (value != null) {
+                if (value is { }) {
                     Native.options_set_cache(nativePointer, value.nativePointer);
                 } else {
                     Native.options_set_cache(nativePointer, null);
@@ -74,7 +74,7 @@ namespace OnlyChain.Database {
         public LevelDBComparator? Comparator {
             set {
                 comparator = value;
-                if (value != null) {
+                if (value is { }) {
                     Native.options_set_comparator(nativePointer, value.nativePointer);
                 } else {
                     Native.options_set_comparator(nativePointer, null);
@@ -85,7 +85,7 @@ namespace OnlyChain.Database {
         public LevelDBFilterPolicy? FilterPolicy {
             set {
                 filterPolicy = value;
-                if (value != null) {
+                if (value is { }) {
                     Native.options_set_filter_policy(nativePointer, value.nativePointer);
                 } else {
                     Native.options_set_filter_policy(nativePointer, null);

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
@@ -10,6 +11,10 @@ using System.Runtime.Intrinsics.X86;
 namespace OnlyChain.Core {
     unsafe public readonly struct Address : IEquatable<Address>, IComparable<Address> {
         public static readonly int Size = sizeof(Address);
+
+        public static readonly Address Zero = default;
+        public static readonly Address Max = new Address("ffffffffffffffffffffffffffffffffffffffff");
+
 
         [DebuggerBrowsable(DebuggerBrowsableState.Never)]
         private readonly Hash<Size160> hash;
@@ -132,6 +137,13 @@ namespace OnlyChain.Core {
             if (bitIndex < 0 || bitIndex >= sizeof(Address) * 8) throw new ArgumentOutOfRangeException(nameof(bitIndex));
             ref var p = ref Unsafe.As<Address, byte>(ref Unsafe.AsRef(this));
             return (Unsafe.Add(ref p, Size - 1 - (bitIndex >> 3)) & (1 << (bitIndex & 7))) != 0;
+        }
+
+        public readonly IComparer<Address> Comparer {
+            get {
+                static Comparison<Address> Comparer(Address @this) => (a, b) => (a ^ @this).CompareTo(b ^ @this);
+                return Comparer<Address>.Create(Comparer(this));
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿#nullable enable
 
+using OnlyChain.Core;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,53 +11,85 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace OnlyChain.Network {
-    public sealed class TcpServer : IAsyncDisposable {
+    /// <summary>
+    /// 主要用于数据同步
+    /// </summary>
+    public sealed class TcpServer : IDisposable {
         private readonly IClient client;
         private readonly Socket tcpSocket;
         private readonly CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
 
-        public IPAddress BindIPAddress { get; }
+        public IPEndPoint IPEndPoint => (IPEndPoint)tcpSocket.LocalEndPoint;
 
-        public int TcpPort { get; }
-
-        public delegate ValueTask AcceptClientHandler(Node node, Socket client);
-
-        public event AcceptClientHandler AcceptClient = null!;
-
-        public TcpServer(IClient client, int tcpPort, IPAddress? bindIP = null) {
-            bindIP ??= IPAddress.IPv6Any;
+        public TcpServer(IClient client, IPEndPoint bindEndPoint) {
             this.client = client;
-            BindIPAddress = bindIP;
 
-            #region Socket相关
-            tcpSocket = new Socket(bindIP.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
-            if (bindIP.AddressFamily == AddressFamily.InterNetworkV6) {
-                tcpSocket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
-            }
-            tcpSocket.Bind(new IPEndPoint(bindIP, tcpPort));
+            tcpSocket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
+            tcpSocket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
+            tcpSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); // 启用tcp心跳
+            tcpSocket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 2); // 重试次数
+            tcpSocket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 10); // 冷却间隔秒数
+            tcpSocket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 1); // 重试间隔秒数
+            tcpSocket.Bind(bindEndPoint);
             tcpSocket.Listen(10);
-            TcpPort = ((IPEndPoint)tcpSocket.LocalEndPoint).Port;
-            #endregion
+
+            StartAccept();
         }
 
-        private async void Start() {
+        private async void StartAccept() {
             while (!cancellationTokenSource.IsCancellationRequested) {
                 try {
-                    StartAcceptClient(await tcpSocket.AcceptAsync());
+                    HandleClient(await tcpSocket.AcceptAsync());
                 } catch { }
             }
         }
 
-        private async void StartAcceptClient(Socket client) {
+        enum Command : byte {
+            QueryBlockFromHash = 0x01,
+            QueryBlockFromHeight = 0x02,
+            QueryAction = 0x03,
+            QueryUser = 0x04,
+
+        }
+
+        private async void HandleClient(Socket client) {
             try {
                 using var stream = new NetworkStream(client, ownsSocket: true) {
                     ReadTimeout = 2000
                 };
-                if (AcceptClient is null) return;
                 using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
-                
 
-                await AcceptClient(null, client);
+                // 01 hash256 
+                // 根据区块hash查询区块
+
+                // 02 height(4 bytes)
+                // 根据区块高度查询区块
+
+                // 03 hash256
+                // 根据action hash查询action
+
+                // 04 address
+                // 查询账户信息
+
+                Command cmd = await stream.ReadStructAsync<Command>(cancellationTokenSource.Token);
+                switch (cmd) {
+                    case Command.QueryBlockFromHash:
+                        Hash<Size256> blockHash = await stream.ReadStructAsync<Hash<Size256>>(cancellationTokenSource.Token);
+
+                        break;
+                    case Command.QueryBlockFromHeight:
+                        uint blockHeight = (uint)IPAddress.NetworkToHostOrder(await stream.ReadStructAsync<int>(cancellationTokenSource.Token));
+
+                        break;
+                    case Command.QueryAction:
+                        Hash<Size256> actionHash = await stream.ReadStructAsync<Hash<Size256>>(cancellationTokenSource.Token);
+
+                        break;
+                    case Command.QueryUser:
+                        Address userAddress = await stream.ReadStructAsync<Address>(cancellationTokenSource.Token);
+
+                        break;
+                }
             } catch {
 
             }
@@ -66,9 +99,9 @@ namespace OnlyChain.Network {
         #region IDisposable Support
         private bool isDisposed = false;
 
-        async ValueTask Dispose(bool disposing) {
+        void Dispose(bool disposing) {
             if (!isDisposed) {
-
+                cancellationTokenSource.Cancel();
                 if (disposing) {
                     GC.SuppressFinalize(this);
                 }
@@ -77,10 +110,10 @@ namespace OnlyChain.Network {
         }
 
         ~TcpServer() {
-            Dispose(false).AsTask().Wait();
+            Dispose(false);
         }
 
-        public ValueTask DisposeAsync() => Dispose(true);
+        public void Dispose() => Dispose(true);
         #endregion
     }
 }

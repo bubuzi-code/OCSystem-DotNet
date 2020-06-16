@@ -1,9 +1,6 @@
 ﻿using OnlyChain.Core;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Text;
 
 namespace OnlyChain.Network {
     public class Node : IEquatable<Node> {

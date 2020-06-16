@@ -67,9 +67,11 @@ namespace OnlyChain.Network {
         public Node this[Address key] => throw new NotImplementedException();
 
         public KBucket(int k, in Address myAddress, Func<Node, Task<bool>> ping) {
+            if (k <= 0) throw new ArgumentOutOfRangeException(nameof(k));
+
             K = k;
             MyAddress = myAddress;
-            this.ping = ping;
+            this.ping = ping ?? throw new ArgumentNullException(nameof(ping));
             for (int i = 0; i < buckets.Length; i++) {
                 buckets[i] = new SortedList<Address, Slot>(k + 1, Comparer<Address>.Create((a, b) => (MyAddress ^ a).CompareTo(MyAddress ^ b)));
             }
@@ -110,12 +112,9 @@ namespace OnlyChain.Network {
         /// <para>如果K桶满了：lookup为true时，添加新节点，然后移除距离自身最远的节点。否则不做任何操作。</para>
         /// </summary>
         /// <param name="node"></param>
-        /// <param name="ping"></param>
         /// <param name="lookup">该值为true表示新节点是通过find_node请求到的</param>
         /// <returns></returns>
         public async ValueTask<AddResult> Add(Node node, bool lookup) {
-            if (ping is null) throw new ArgumentNullException(nameof(ping));
-
             int index = (node.Address ^ MyAddress).Log2;
             if (index < 0) return AddResult.IsSelf;
 
@@ -161,7 +160,7 @@ namespace OnlyChain.Network {
                 }
             }
 
-            return pingTask != null ? await pingTask : AddResult.Success;
+            return pingTask is { } ? await pingTask : AddResult.Success;
         }
 
         public bool Remove(Address address) {

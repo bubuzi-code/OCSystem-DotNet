@@ -19,5 +19,7 @@ namespace OnlyChain.Network.Objects {
         }
 
         public static implicit operator byte[](BBuffer @this) => @this.Buffer;
+
+        public void Deconstruct(out byte[] result) => result = Buffer;
     }
 }

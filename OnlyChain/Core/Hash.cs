@@ -3,9 +3,10 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Drawing;
 
 namespace OnlyChain.Core {
-    unsafe public struct Hash<TSize> : IEquatable<Hash<TSize>> where TSize : unmanaged {
+    unsafe public readonly struct Hash<TSize> : IEquatable<Hash<TSize>> where TSize : unmanaged {
         static Hash() {
             if (sizeof(TSize) % 4 != 0) throw new TypeLoadException("Hash长度必须是4的倍数");
         }
@@ -14,7 +15,7 @@ namespace OnlyChain.Core {
         public static readonly Hash<TSize> Empty = new Hash<TSize>();
 
         [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-        private TSize buffer;
+        private readonly TSize buffer;
 
         public Hash(ReadOnlySpan<byte> hash) {
             if (hash.Length != sizeof(TSize)) throw new ArgumentException($"必须是{sizeof(TSize)}字节", nameof(hash));
@@ -29,11 +30,11 @@ namespace OnlyChain.Core {
         }
 
         /// <summary>
-        /// 栈上的非只读<see cref="Hash{TSize}"/>对象使用此属性才是安全的。
+        /// 栈上的<see cref="Hash{TSize}"/>对象使用此属性才是安全的。
         /// </summary>
-        public Span<byte> Span {
+        public readonly Span<byte> Span {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => MemoryMarshal.CreateSpan(ref Unsafe.As<TSize, byte>(ref buffer), sizeof(TSize));
+            get => MemoryMarshal.CreateSpan(ref Unsafe.As<TSize, byte>(ref Unsafe.AsRef(buffer)), sizeof(TSize));
         }
 
         /// <summary>
@@ -44,14 +45,16 @@ namespace OnlyChain.Core {
             get => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<TSize, byte>(ref Unsafe.AsRef(buffer)), sizeof(TSize));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ref Hash<TSize> FromSpan(Span<byte> span) {
             if (span.Length < sizeof(TSize)) throw new ArgumentException($"必须大于等于{sizeof(TSize)}字节", nameof(span));
             return ref Unsafe.As<byte, Hash<TSize>>(ref MemoryMarshal.GetReference(span));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Hash<TSize> Random() {
-            Hash<TSize> result = default;
-            rng.GetBytes(result.Span);
+            Hash<TSize> result;
+            rng.GetBytes(new Span<byte>(&result, sizeof(TSize)));
             return result;
         }
 
@@ -84,6 +87,10 @@ namespace OnlyChain.Core {
             ReadOnlySpan.CopyTo(buffer);
         }
 
-        public readonly byte[] ToArray() => ReadOnlySpan.ToArray();
+        public readonly byte[] ToArray() {
+            fixed (TSize* p = &buffer) {
+                return new ReadOnlySpan<byte>(p, sizeof(TSize)).ToArray();
+            }
+        }
     }
 }

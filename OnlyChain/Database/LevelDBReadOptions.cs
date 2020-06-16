@@ -29,7 +29,7 @@ namespace OnlyChain.Database {
         public LevelDBSnapshot? Snapshot {
             set {
                 snapshot = value;
-                if (value != null) {
+                if (value is { }) {
                     Native.readoptions_set_snapshot(nativePointer, value.nativePointer);
                 } else {
                     Native.readoptions_set_snapshot(nativePointer, null);

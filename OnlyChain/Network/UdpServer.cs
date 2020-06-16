@@ -135,16 +135,12 @@ namespace OnlyChain.Network {
         private int processCount = 0;
         private readonly Timer processCountTask;
 
-        public IPAddress BindIPAddress { get; }
-
-        public int UdpPort { get; }
+        public IPEndPoint IPEndPoint => (IPEndPoint)udpSocket.LocalEndPoint;
 
         public int TPS { get; private set; }
 
-        public UdpServer(IClient client, int udpPort, IPAddress? bindIP = null) {
-            bindIP ??= IPAddress.IPv6Any;
+        public UdpServer(IClient client, IPEndPoint udpEndPoint) {
             this.client = client;
-            BindIPAddress = bindIP;
 
             #region 通过反射将远程请求Handler绑定到Client方法上
             Type type = client.GetType();
@@ -182,16 +178,13 @@ namespace OnlyChain.Network {
             #endregion
 
             #region Socket相关
-            udpSocket = new Socket(bindIP.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
-            if (bindIP.AddressFamily == AddressFamily.InterNetworkV6) {
-                udpSocket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
-            }
-            udpSocket.Bind(new IPEndPoint(bindIP, udpPort));
+            udpSocket = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
+            udpSocket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
+            udpSocket.Bind(udpEndPoint);
             const int IOC_IN = unchecked((int)0x80000000);
             const int IOC_VENDOR = 0x18000000;
             const int SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
             udpSocket.IOControl(SIO_UDP_CONNRESET, new[] { Convert.ToByte(false) }, null);
-            UdpPort = ((IPEndPoint)udpSocket.LocalEndPoint).Port;
             #endregion
 
             for (int i = 0; i < serverTasks.Length; i++) {
@@ -206,19 +199,19 @@ namespace OnlyChain.Network {
         }
 
         private async Task StartReceive() {
-            EndPoint remoteEP = new IPEndPoint(BindIPAddress.AddressFamily == AddressFamily.InterNetwork ? IPAddress.None : IPAddress.IPv6None, 0);
+            EndPoint remoteEP = new IPEndPoint(IPAddress.IPv6None, 0);
             var buffer = new byte[4096];
             CancellationToken cancellationToken = cancellationTokenSource.Token;
             while (!cancellationToken.IsCancellationRequested) {
                 try {
                     var result = await udpSocket.ReceiveFromAsync(buffer, SocketFlags.None, remoteEP);
                     var obj = Bencode.Decode(buffer.AsSpan(0, result.ReceivedBytes), client.NetworkPrefix);
-                    
+
                     if (!(obj is BDict dict)) continue; // 不是字典类型
 
-                    if (!(dict["i"] is BUInt { Value: var packageIndex })) continue; // 不存在i(包序号)字段
-                    if (!(dict["a"] is BAddress { Value: var senderAddress })) continue; // 不存在a(发送者id)字段
-                    if (dict["c"] is BString { Value: string cmd }) { // 存在c(命令)字段，表示远端请求
+                    if (!(dict["i"] is BUInt(ulong packageIndex))) continue; // 不存在i(包序号)字段
+                    if (!(dict["a"] is BAddress(Address senderAddress))) continue; // 不存在a(发送者id)字段
+                    if (dict["c"] is BString(string cmd)) { // 存在c(命令)字段，表示远端请求
                         if (!requestHandlers.TryGetValue(cmd, out var handler)) continue;
 
                         var responseTask = handler(new RemoteRequest(dict, (IPEndPoint)result.RemoteEndPoint, senderAddress));

@@ -18,7 +18,7 @@ namespace OnlyChain.Database {
             Name = name;
             this.options = options;
             nativePointer = Native.open(options.nativePointer, name, out var err);
-            err.TryThrow();
+            err.FreeTryThrow();
         }
 
         public void Put(ReadOnlySpan<byte> key, ReadOnlySpan<byte> value, bool sync = false) {
@@ -29,7 +29,7 @@ namespace OnlyChain.Database {
             fixed (byte* pKey = key)
             fixed (byte* pValue = value) {
                 Native.put(nativePointer, options.nativePointer, pKey, (size_t)key.Length, pValue, (size_t)value.Length, out IntPtr err);
-                err.TryThrow();
+                err.FreeTryThrow();
             }
         }
 
@@ -43,7 +43,7 @@ namespace OnlyChain.Database {
                     if ((ulong)valLength > int.MaxValue) throw new InvalidOperationException("取出来的值太大");
                     new ReadOnlySpan<byte>(val, (int)valLength).CopyTo(new Span<byte>(tmpValuePointer.ToPointer(), tmpValueLength));
                 }, out IntPtr err);
-                err.TryThrow();
+                err.FreeTryThrow();
                 return result;
             }
         }
@@ -57,7 +57,7 @@ namespace OnlyChain.Database {
                     result = new byte[(int)valLength];
                     new ReadOnlySpan<byte>(val, (int)valLength).CopyTo(result);
                 }, out IntPtr err);
-                err.TryThrow();
+                err.FreeTryThrow();
                 return result;
             }
         }
@@ -69,7 +69,7 @@ namespace OnlyChain.Database {
         public void Delete(ReadOnlySpan<byte> key, LevelDBWriteOptions options) {
             fixed (byte* pKey = key) {
                 Native.delete(nativePointer, options.nativePointer, pKey, (size_t)key.Length, out IntPtr err);
-                err.TryThrow();
+                err.FreeTryThrow();
             }
         }
 
@@ -79,12 +79,12 @@ namespace OnlyChain.Database {
 
         public void Write(LevelDBWriteBatch writeBatch, LevelDBWriteOptions options) {
             Native.write(nativePointer, options.nativePointer, writeBatch.nativePointer, out IntPtr err);
-            err.TryThrow();
+            err.FreeTryThrow();
         }
 
         public void Repair() {
             Native.repair_db(options.nativePointer, Name, out IntPtr err);
-            err.TryThrow();
+            err.FreeTryThrow();
         }
 
         protected override void UnmanagedDispose() {
